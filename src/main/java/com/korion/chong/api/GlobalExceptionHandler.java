@@ -3,6 +3,7 @@ package com.korion.chong.api;
 import com.korion.chong.leader.ForbiddenCountryScopeException;
 import com.korion.chong.leader.LeaderNotFoundException;
 import com.korion.chong.auth.AuthValidationException;
+import com.korion.chong.partner.PartnerNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -23,6 +24,12 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiErrorResponse> notFound(LeaderNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiErrorResponse.of("LEADER_NOT_FOUND", exception.getMessage()));
+    }
+
+    @ExceptionHandler(PartnerNotFoundException.class)
+    ResponseEntity<ApiErrorResponse> partnerNotFound(PartnerNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiErrorResponse.of("PARTNER_NOT_FOUND", exception.getMessage()));
     }
 
     @ExceptionHandler(AuthValidationException.class)

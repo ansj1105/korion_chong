@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -119,6 +120,71 @@ class LeaderDashboardServiceTest {
         @Override
         public long countPartners(long leaderId, String countryScope, PartnerSearchCriteria criteria) {
             return partnerCount;
+        }
+
+        @Override
+        public Map<String, Object> findSignupApplications(long leaderId, String countryScope, String applicantType) {
+            return Map.of("rows", List.of());
+        }
+
+        @Override
+        public Map<String, Object> findPartnerSales(long leaderId, String countryScope, LocalDate periodStart, LocalDate periodEnd) {
+            return Map.of("stats", List.of(), "t1Rows", List.of(), "merchantRows", List.of());
+        }
+
+        @Override
+        public Map<String, Object> findMerchants(long leaderId, String countryScope) {
+            return Map.of("stats", List.of(), "rows", List.of());
+        }
+
+        @Override
+        public Map<String, Object> findMerchantSales(long leaderId, String countryScope, LocalDate periodStart, LocalDate periodEnd) {
+            return Map.of("stats", List.of(), "t1Rows", List.of(), "t2Rows", List.of());
+        }
+
+        @Override
+        public Map<String, Object> findTransactions(long leaderId, String countryScope, String variant, LocalDate periodStart, LocalDate periodEnd) {
+            return Map.of("stats", List.of(), "all", Map.of("rows", List.of()), "offline", Map.of("rows", List.of()), "failed", Map.of("rows", List.of()));
+        }
+
+        @Override
+        public Map<String, Object> findSettlementRequestSummary(long leaderId, String countryScope, LocalDate periodStart, LocalDate periodEnd) {
+            return Map.of("stats", List.of());
+        }
+
+        @Override
+        public Map<String, Object> findSettlementHistory(long leaderId, String countryScope) {
+            return Map.of("rows", List.of());
+        }
+
+        @Override
+        public Map<String, Object> findSettlementDetail(long leaderId, String countryScope) {
+            return Map.of("basicInfo", List.of());
+        }
+
+        @Override
+        public Map<String, Object> findHqNotices(long leaderId, String countryScope) {
+            return Map.of("rows", List.of());
+        }
+
+        @Override
+        public Map<String, Object> findNoticeSendSummary(long leaderId, String countryScope) {
+            return Map.of("metrics", List.of());
+        }
+
+        @Override
+        public Map<String, Object> findNoticeHistory(long leaderId, String countryScope) {
+            return Map.of("metrics", List.of(), "rows", List.of());
+        }
+
+        @Override
+        public Map<String, Object> findProfile(long leaderId, String countryScope) {
+            return Map.of("code", "SP-00010");
+        }
+
+        @Override
+        public Map<String, Object> findActivityLogs(long leaderId, String countryScope) {
+            return Map.of("metrics", List.of(), "rows", List.of());
         }
     }
 }
