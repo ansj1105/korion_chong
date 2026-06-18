@@ -1,11 +1,22 @@
 package com.korion.chong.leader;
 
+import com.korion.chong.settlement.SettlementActionRequest;
+import com.korion.chong.settlement.SettlementActionResponse;
+import com.korion.chong.settlement.SettlementCreateRequest;
+import com.korion.chong.settlement.SettlementService;
+import com.korion.chong.notice.NoticeSendRequest;
+import com.korion.chong.notice.NoticeSendResponse;
+import com.korion.chong.notice.NoticeService;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import java.util.Map;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -17,10 +28,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class LeaderController {
     private final AuthContextFactory authContextFactory;
     private final LeaderDashboardService service;
+    private final SignupApprovalService signupApprovalService;
+    private final SettlementService settlementService;
+    private final NoticeService noticeService;
 
-    public LeaderController(AuthContextFactory authContextFactory, LeaderDashboardService service) {
+    public LeaderController(
+            AuthContextFactory authContextFactory,
+            LeaderDashboardService service,
+            SignupApprovalService signupApprovalService,
+            SettlementService settlementService,
+            NoticeService noticeService
+    ) {
         this.authContextFactory = authContextFactory;
         this.service = service;
+        this.signupApprovalService = signupApprovalService;
+        this.settlementService = settlementService;
+        this.noticeService = noticeService;
     }
 
     @GetMapping("/dashboard")
@@ -162,6 +185,15 @@ public class LeaderController {
         return service.getNoticeHistory(context(leaderId, countryScopes), countryScope);
     }
 
+    @PostMapping("/notices/send")
+    public NoticeSendResponse sendNotice(
+            @RequestHeader("X-Leader-Id") String leaderId,
+            @RequestHeader("X-Country-Scopes") String countryScopes,
+            @Valid @RequestBody NoticeSendRequest request
+    ) {
+        return noticeService.sendLeaderNotice(context(leaderId, countryScopes), request);
+    }
+
     @GetMapping("/profile")
     public Map<String, Object> profile(
             @RequestHeader("X-Leader-Id") String leaderId,
@@ -178,6 +210,65 @@ public class LeaderController {
             @RequestParam String countryScope
     ) {
         return service.getActivityLogs(context(leaderId, countryScopes), countryScope);
+    }
+
+    @PostMapping("/signup-applications/{applicationId}/approve")
+    public SignupApprovalResponse approveSignupApplication(
+            @RequestHeader("X-Leader-Id") String leaderId,
+            @RequestHeader("X-Country-Scopes") String countryScopes,
+            @PathVariable long applicationId,
+            @Valid @RequestBody(required = false) SignupApprovalDecisionRequest request
+    ) {
+        return signupApprovalService.approve(context(leaderId, countryScopes), applicationId, request);
+    }
+
+    @PostMapping("/signup-applications/{applicationId}/reject")
+    public SignupRejectionResponse rejectSignupApplication(
+            @RequestHeader("X-Leader-Id") String leaderId,
+            @RequestHeader("X-Country-Scopes") String countryScopes,
+            @PathVariable long applicationId,
+            @Valid @RequestBody(required = false) SignupApprovalDecisionRequest request
+    ) {
+        return signupApprovalService.reject(context(leaderId, countryScopes), applicationId, request);
+    }
+
+    @PostMapping("/settlement-requests")
+    public SettlementActionResponse createSettlementRequest(
+            @RequestHeader("X-Leader-Id") String leaderId,
+            @RequestHeader("X-Country-Scopes") String countryScopes,
+            @Valid @RequestBody SettlementCreateRequest request
+    ) {
+        return settlementService.createLeaderRequest(context(leaderId, countryScopes), request);
+    }
+
+    @PostMapping("/settlement-requests/{settlementRequestId}/approve")
+    public SettlementActionResponse approveSettlementRequest(
+            @RequestHeader("X-Leader-Id") String leaderId,
+            @RequestHeader("X-Country-Scopes") String countryScopes,
+            @PathVariable long settlementRequestId,
+            @Valid @RequestBody SettlementActionRequest request
+    ) {
+        return settlementService.approve(context(leaderId, countryScopes), settlementRequestId, request);
+    }
+
+    @PostMapping("/settlement-requests/{settlementRequestId}/reject")
+    public SettlementActionResponse rejectSettlementRequest(
+            @RequestHeader("X-Leader-Id") String leaderId,
+            @RequestHeader("X-Country-Scopes") String countryScopes,
+            @PathVariable long settlementRequestId,
+            @Valid @RequestBody SettlementActionRequest request
+    ) {
+        return settlementService.reject(context(leaderId, countryScopes), settlementRequestId, request);
+    }
+
+    @PostMapping("/settlement-requests/{settlementRequestId}/mark-paid")
+    public SettlementActionResponse markSettlementRequestPaid(
+            @RequestHeader("X-Leader-Id") String leaderId,
+            @RequestHeader("X-Country-Scopes") String countryScopes,
+            @PathVariable long settlementRequestId,
+            @Valid @RequestBody(required = false) SettlementActionRequest request
+    ) {
+        return settlementService.markPaid(context(leaderId, countryScopes), settlementRequestId, request);
     }
 
     private AuthContext context(String leaderId, String countryScopes) {

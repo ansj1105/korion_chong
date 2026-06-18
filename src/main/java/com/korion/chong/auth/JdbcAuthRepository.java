@@ -238,6 +238,7 @@ public class JdbcAuthRepository implements AuthRepository {
                 .addValue("whatsapp", request.whatsapp())
                 .addValue("referralCode", request.referralCode())
                 .addValue("referralCodeId", referral == null ? null : findReferralCodeId(request.referralCode()))
+                .addValue("ownerPartnerId", referral == null ? null : findOwnerPartnerId(request.applicantType(), referral.ownerPartnerId()))
                 .addValue("applicationType", applicationType(request.applicantType()))
                 .addValue("requestedRole", requestedRole(request.applicantType()))
                 .addValue("contractPath", contractPath(request.applicantType(), referral))
@@ -256,7 +257,7 @@ public class JdbcAuthRepository implements AuthRepository {
                 INSERT INTO distributor_signup_applications (
                     application_type, applicant_type, login_id, password_hash, email, company_name,
                     contact_name, phone, telegram, whatsapp, referral_code,
-                    referral_code_id, requested_role, contract_path,
+                    referral_code_id, owner_partner_id, requested_role, contract_path,
                     country, region, city, address, business_type,
                     wallet_network, wallet_address, wallet_auth_status,
                     integration_plan, evidence_note, request_id, source, status
@@ -264,7 +265,7 @@ public class JdbcAuthRepository implements AuthRepository {
                 VALUES (
                     :applicationType, :applicantType, :loginId, :passwordHash, :email, :companyName,
                     :contactName, :phone, :telegram, :whatsapp, :referralCode,
-                    :referralCodeId, :requestedRole, :contractPath,
+                    :referralCodeId, :ownerPartnerId, :requestedRole, :contractPath,
                     :country, :region, :city, :address, :businessType,
                     :walletNetwork, :walletAddress, 'UNVERIFIED',
                     :integrationPlan, :evidenceNote, :requestId, 'PORTAL', 'REQUESTED'
@@ -294,6 +295,20 @@ public class JdbcAuthRepository implements AuthRepository {
         return jdbcTemplate.queryForObject("""
                 SELECT id FROM referral_codes WHERE code = :code
                 """, Map.of("code", code), Long.class);
+    }
+
+    private Long findOwnerPartnerId(String applicantType, Long referralOwnerPartnerId) {
+        if (!"MERCHANT".equals(applicantType) || referralOwnerPartnerId == null) {
+            return null;
+        }
+        List<Long> rows = jdbcTemplate.query("""
+                SELECT id
+                  FROM partners
+                 WHERE id = :partnerId
+                   AND partner_type = 'SALES_PARTNER'
+                 LIMIT 1
+                """, Map.of("partnerId", referralOwnerPartnerId), (rs, rowNum) -> rs.getLong("id"));
+        return rows.stream().findFirst().orElse(null);
     }
 
     private long count(String sql, Map<String, ?> params) {

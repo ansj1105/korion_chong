@@ -1,9 +1,18 @@
 package com.korion.chong.partner;
 
+import com.korion.chong.settlement.SettlementActionResponse;
+import com.korion.chong.settlement.SettlementCreateRequest;
+import com.korion.chong.settlement.SettlementService;
+import com.korion.chong.notice.NoticeSendRequest;
+import com.korion.chong.notice.NoticeSendResponse;
+import com.korion.chong.notice.NoticeService;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import java.util.Map;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -15,10 +24,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class PartnerController {
     private final PartnerAuthContextFactory authContextFactory;
     private final PartnerDashboardService service;
+    private final SettlementService settlementService;
+    private final NoticeService noticeService;
 
-    public PartnerController(PartnerAuthContextFactory authContextFactory, PartnerDashboardService service) {
+    public PartnerController(
+            PartnerAuthContextFactory authContextFactory,
+            PartnerDashboardService service,
+            SettlementService settlementService,
+            NoticeService noticeService
+    ) {
         this.authContextFactory = authContextFactory;
         this.service = service;
+        this.settlementService = settlementService;
+        this.noticeService = noticeService;
     }
 
     @GetMapping("/dashboard")
@@ -123,6 +141,15 @@ public class PartnerController {
         return service.getNoticeHistory(context(partnerId, countryScopes), countryScope);
     }
 
+    @PostMapping("/notices/outbox")
+    public NoticeSendResponse sendNotice(
+            @RequestHeader("X-Partner-Id") String partnerId,
+            @RequestHeader("X-Country-Scopes") String countryScopes,
+            @Valid @RequestBody NoticeSendRequest request
+    ) {
+        return noticeService.sendPartnerNotice(context(partnerId, countryScopes), request);
+    }
+
     @GetMapping("/profile")
     public Map<String, Object> profile(
             @RequestHeader("X-Partner-Id") String partnerId,
@@ -139,6 +166,15 @@ public class PartnerController {
             @RequestParam String countryScope
     ) {
         return service.getActivityLogs(context(partnerId, countryScopes), countryScope);
+    }
+
+    @PostMapping("/settlements/requests")
+    public SettlementActionResponse createSettlementRequest(
+            @RequestHeader("X-Partner-Id") String partnerId,
+            @RequestHeader("X-Country-Scopes") String countryScopes,
+            @Valid @RequestBody SettlementCreateRequest request
+    ) {
+        return settlementService.createPartnerRequest(context(partnerId, countryScopes), request);
     }
 
     private PartnerAuthContext context(String partnerId, String countryScopes) {

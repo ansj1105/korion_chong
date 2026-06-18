@@ -488,15 +488,62 @@ public class JdbcLeaderDashboardRepository implements LeaderDashboardRepository 
 
     @Override
     public Map<String, Object> findSettlementHistory(long leaderId, String countryScope) {
+        MapSqlParameterSource params = baseParams(leaderId, countryScope);
+        List<Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT sr.id, sr.request_no, sr.period_start, sr.period_end,
+                       sr.requested_amount, sr.approved_amount, sr.held_amount, sr.status,
+                       sr.requested_at, sr.paid_at,
+                       COALESCE(SUM(ce.gross_amount), 0) AS total_amount,
+                       COALESCE(SUM(CASE WHEN ce.beneficiary_type = 'PARTNER' THEN ce.commission_amount ELSE 0 END), 0) AS partner_amount
+                  FROM distributor_settlement_requests sr
+             LEFT JOIN distributor_commission_entries ce ON ce.settlement_request_id = sr.id
+                 WHERE sr.recipient_type = 'LEADER'
+                   AND sr.recipient_partner_id = :leaderId
+                 GROUP BY sr.id, sr.request_no, sr.period_start, sr.period_end,
+                          sr.requested_amount, sr.approved_amount, sr.held_amount, sr.status,
+                          sr.requested_at, sr.paid_at
+                 ORDER BY sr.requested_at DESC, sr.id DESC
+                 LIMIT 50
+                """, params, (rs, rowNum) -> settlementHistoryRow(rs, true));
+        String lastSettleDate = lastPaidSettlementDate(params, "LEADER");
+        BigDecimal thisRequestAmount = pendingSettlementAmount(params, "LEADER");
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
-        result.put("lastSettleDate", "-");
-        result.put("thisRequestAmount", "0 KORI");
-        result.put("rows", List.of());
+        result.put("lastSettleDate", lastSettleDate);
+        result.put("thisRequestAmount", kori(thisRequestAmount));
+        result.put("rows", rows);
         return result;
     }
 
     @Override
     public Map<String, Object> findSettlementDetail(long leaderId, String countryScope) {
+        MapSqlParameterSource params = baseParams(leaderId, countryScope);
+        List<Map<String, Object>> details = jdbcTemplate.query("""
+                SELECT sr.id, sr.request_no, sr.period_start, sr.period_end,
+                       sr.requested_amount, sr.approved_amount, sr.held_amount, sr.status,
+                       sr.requested_at, sr.paid_at,
+                       COALESCE(SUM(ce.gross_amount), 0) AS total_amount,
+                       COALESCE(SUM(ce.fee_amount), 0) AS total_fee,
+                       COALESCE(SUM(CASE WHEN ce.beneficiary_type = 'PARTNER' THEN ce.commission_amount ELSE 0 END), 0) AS partner_amount,
+                       COALESCE(SUM(CASE WHEN ce.beneficiary_type = 'LEADER' THEN ce.commission_amount ELSE 0 END), 0) AS leader_amount
+                  FROM distributor_settlement_requests sr
+             LEFT JOIN distributor_commission_entries ce ON ce.settlement_request_id = sr.id
+                 WHERE sr.recipient_type = 'LEADER'
+                   AND sr.recipient_partner_id = :leaderId
+                 GROUP BY sr.id, sr.request_no, sr.period_start, sr.period_end,
+                          sr.requested_amount, sr.approved_amount, sr.held_amount, sr.status,
+                          sr.requested_at, sr.paid_at
+                 ORDER BY sr.requested_at DESC, sr.id DESC
+                 LIMIT 1
+                """, params, (rs, rowNum) -> leaderSettlementDetail(rs, leaderId));
+        if (!details.isEmpty()) {
+            Map<String, Object> detail = details.get(0);
+            long settlementRequestId = ((Number) detail.get("settlementRequestId")).longValue();
+            detail.remove("settlementRequestId");
+            detail.put("partnerRows", settlementPartnerRows(settlementRequestId));
+            detail.put("merchantRows", settlementMerchantRows(settlementRequestId, "LEADER"));
+            detail.put("heldRows", settlementHeldRows(settlementRequestId));
+            return detail;
+        }
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("no", "-");
         result.put("status", "내역 없음");
@@ -637,6 +684,12 @@ public class JdbcLeaderDashboardRepository implements LeaderDashboardRepository 
                 .addValue("periodEnd", periodEnd);
     }
 
+    private MapSqlParameterSource baseParams(long leaderId, String countryScope) {
+        return new MapSqlParameterSource()
+                .addValue("leaderId", leaderId)
+                .addValue("countryScope", countryScope);
+    }
+
     private MapSqlParameterSource partnerParams(long leaderId, String countryScope, PartnerSearchCriteria criteria) {
         return new MapSqlParameterSource()
                 .addValue("leaderId", leaderId)
@@ -760,6 +813,161 @@ public class JdbcLeaderDashboardRepository implements LeaderDashboardRepository 
         return row;
     }
 
+    private Map<String, Object> settlementHistoryRow(ResultSet rs, boolean leader) throws SQLException {
+        LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+        row.put("no", rs.getString("request_no"));
+        row.put("appliedDate", date(rs.getTimestamp("requested_at")));
+        row.put("period", DATE.format(rs.getDate("period_start").toLocalDate()) + "~ " + DATE.format(rs.getDate("period_end").toLocalDate()));
+        row.put("totalAmount", kori(rs, "total_amount"));
+        if (leader) {
+            row.put("leaderAmount", kori(rs, "requested_amount"));
+            row.put("partnerAmount", kori(rs, "partner_amount"));
+        } else {
+            row.put("partnerAmount", kori(rs, "requested_amount"));
+        }
+        row.put("held", kori(rs, "held_amount"));
+        row.put("status", settlementStatus(rs.getString("status")));
+        row.put("paidDate", date(rs.getTimestamp("paid_at")));
+        return row;
+    }
+
+    private Map<String, Object> leaderSettlementDetail(ResultSet rs, long leaderId) throws SQLException {
+        String requestNo = rs.getString("request_no");
+        String status = settlementStatus(rs.getString("status"));
+        String period = DATE.format(rs.getDate("period_start").toLocalDate()) + " ~ " + DATE.format(rs.getDate("period_end").toLocalDate());
+        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        result.put("settlementRequestId", rs.getLong("id"));
+        result.put("no", requestNo);
+        result.put("status", status);
+        result.put("basicInfo", List.of(
+                field("settle.detail.a.no", requestNo),
+                field("settle.detail.a.leaderName", partnerCode(leaderId) + " / " + rs.getString("status")),
+                field("settle.detail.a.leaderCode", partnerCode(leaderId)),
+                field("settle.detail.a.period", period),
+                field("settle.detail.a.lastDate", DATE.format(rs.getDate("period_end").toLocalDate())),
+                highlightedField("settle.detail.a.appliedDate", date(rs.getTimestamp("requested_at"))),
+                field("settle.detail.a.paidDate", date(rs.getTimestamp("paid_at"))),
+                field("settle.detail.a.status", status)
+        ));
+        result.put("amountSummary", List.of(
+                field("settle.detail.b.total", kori(rs, "total_amount")),
+                field("settle.detail.b.totalFee", kori(rs, "total_fee")),
+                field("settle.detail.b.partnerProfit", kori(rs, "partner_amount")),
+                field("settle.detail.b.directProfit", kori(rs, "leader_amount")),
+                field("settle.detail.b.held", kori(rs, "held_amount")),
+                highlightedField("settle.detail.b.finalAmount", kori(rs, "requested_amount")),
+                field("settle.detail.b.autoSettle", kori(rs, "partner_amount"))
+        ));
+        return result;
+    }
+
+    private List<Map<String, Object>> settlementPartnerRows(long settlementRequestId) {
+        return jdbcTemplate.query("""
+                SELECT p.id, p.city,
+                       COALESCE(SUM(ce.gross_amount), 0) AS gross_amount,
+                       COALESCE(SUM(ce.commission_amount), 0) AS fee,
+                       MAX(sr.paid_at) AS paid_at,
+                       MAX(ce.settlement_status) AS status
+                  FROM distributor_commission_entries ce
+                  JOIN partners p ON p.id = ce.beneficiary_partner_id
+                  JOIN distributor_settlement_requests sr ON sr.id = ce.settlement_request_id
+                 WHERE ce.settlement_request_id = :settlementRequestId
+                   AND ce.beneficiary_type = 'PARTNER'
+                 GROUP BY p.id, p.city
+                 ORDER BY fee DESC, p.id DESC
+                 LIMIT 50
+                """, Map.of("settlementRequestId", settlementRequestId), (rs, rowNum) -> {
+            LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+            row.put("name", valueOrDash(rs.getString("city"), partnerCode(rs.getLong("id"))));
+            row.put("code", partnerCode(rs.getLong("id")));
+            row.put("amount", amountText(amount(rs, "gross_amount")));
+            row.put("fee", amountText(amount(rs, "fee")));
+            row.put("status", settlementStatus(rs.getString("status")));
+            row.put("paidDate", date(rs.getTimestamp("paid_at")));
+            return row;
+        });
+    }
+
+    private List<Map<String, Object>> settlementMerchantRows(long settlementRequestId, String beneficiaryType) {
+        return jdbcTemplate.query("""
+                SELECT m.id, m.merchant_code, m.merchant_name,
+                       COALESCE(SUM(ce.gross_amount), 0) AS gross_amount,
+                       COALESCE(SUM(ce.commission_amount), 0) AS fee,
+                       MAX(ce.settlement_status) AS status
+                  FROM distributor_commission_entries ce
+                  JOIN merchants m ON m.id = ce.merchant_id
+                 WHERE ce.settlement_request_id = :settlementRequestId
+                   AND ce.beneficiary_type = :beneficiaryType
+                 GROUP BY m.id, m.merchant_code, m.merchant_name
+                 ORDER BY fee DESC, m.id DESC
+                 LIMIT 50
+                """, new MapSqlParameterSource()
+                .addValue("settlementRequestId", settlementRequestId)
+                .addValue("beneficiaryType", beneficiaryType), (rs, rowNum) -> {
+            LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+            row.put("name", rs.getString("merchant_name"));
+            row.put("code", valueOrDash(rs.getString("merchant_code"), merchantCode(rs.getLong("id"))));
+            row.put("amount", amountText(amount(rs, "gross_amount")));
+            row.put("fee", amountText(amount(rs, "fee")));
+            row.put("status", settlementStatus(rs.getString("status")));
+            return row;
+        });
+    }
+
+    private List<Map<String, Object>> settlementHeldRows(long settlementRequestId) {
+        return jdbcTemplate.query("""
+                SELECT ce.id, m.merchant_name, p.id AS partner_id, ce.hold_reason,
+                       ce.gross_amount, ce.commission_amount, ce.settlement_status
+                  FROM distributor_commission_entries ce
+                  JOIN merchants m ON m.id = ce.merchant_id
+             LEFT JOIN partners p ON p.id = m.parent_sales_partner_id
+                 WHERE ce.settlement_request_id = :settlementRequestId
+                   AND ce.settlement_status IN ('HELD', 'REJECTED', 'CANCELLED')
+                 ORDER BY ce.id DESC
+                 LIMIT 50
+                """, Map.of("settlementRequestId", settlementRequestId), (rs, rowNum) -> {
+            LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+            row.put("txNo", "CE-" + rs.getLong("id"));
+            row.put("merchant", rs.getString("merchant_name"));
+            long partnerId = rs.getLong("partner_id");
+            row.put("partner", rs.wasNull() ? "직접 계약" : partnerCode(partnerId));
+            row.put("reason", valueOrDash(rs.getString("hold_reason"), settlementStatus(rs.getString("settlement_status"))));
+            row.put("amount", amountText(amount(rs, "gross_amount")));
+            row.put("heldFee", amountText(amount(rs, "commission_amount")));
+            row.put("status", settlementStatus(rs.getString("settlement_status")));
+            return row;
+        });
+    }
+
+    private String lastPaidSettlementDate(MapSqlParameterSource params, String recipientType) {
+        List<String> rows = jdbcTemplate.query("""
+                SELECT paid_at
+                  FROM distributor_settlement_requests
+                 WHERE recipient_type = :recipientType
+                   AND recipient_partner_id = :leaderId
+                   AND status = 'PAID'
+                   AND paid_at IS NOT NULL
+                 ORDER BY paid_at DESC
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValues(params.getValues())
+                .addValue("recipientType", recipientType), (rs, rowNum) -> date(rs.getTimestamp("paid_at")));
+        return rows.stream().findFirst().orElse("-");
+    }
+
+    private BigDecimal pendingSettlementAmount(MapSqlParameterSource params, String recipientType) {
+        BigDecimal amount = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(requested_amount), 0)
+                  FROM distributor_settlement_requests
+                 WHERE recipient_type = :recipientType
+                   AND recipient_partner_id = :leaderId
+                   AND status IN ('DRAFT', 'REQUESTED', 'REVIEWING', 'APPROVED', 'HELD', 'ADJUSTMENT_REQUIRED')
+                """, new MapSqlParameterSource()
+                .addValues(params.getValues())
+                .addValue("recipientType", recipientType), BigDecimal.class);
+        return amount == null ? ZERO : amount;
+    }
+
     private long countBy(String sql, MapSqlParameterSource params) {
         Long count = jdbcTemplate.queryForObject(sql, params, Long.class);
         return count == null ? 0L : count;
@@ -807,6 +1015,12 @@ public class JdbcLeaderDashboardRepository implements LeaderDashboardRepository 
         return field;
     }
 
+    private static LinkedHashMap<String, Object> highlightedField(String labelKey, String value) {
+        LinkedHashMap<String, Object> field = field(labelKey, value);
+        field.put("color", "#24e6b8");
+        return field;
+    }
+
     private static String applicationCode(String applicantType, long id) {
         return ("PARTNER".equals(applicantType) ? "APP-SP-" : "APP-MER-") + String.format("%05d", id);
     }
@@ -844,6 +1058,19 @@ public class JdbcLeaderDashboardRepository implements LeaderDashboardRepository 
             case "CANCELLED" -> "취소";
             case "REFUNDED" -> "환불";
             case "FAILED" -> "실패";
+            default -> valueOrDash(status);
+        };
+    }
+
+    private static String settlementStatus(String status) {
+        return switch (status) {
+            case "DRAFT" -> "임시저장";
+            case "REQUESTED", "REVIEWING" -> "본사 검토중";
+            case "APPROVED" -> "지급 대기";
+            case "PAID" -> "지급 완료";
+            case "HELD", "ADJUSTMENT_REQUIRED" -> "보류";
+            case "REJECTED" -> "거절";
+            case "CANCELLED" -> "취소";
             default -> valueOrDash(status);
         };
     }

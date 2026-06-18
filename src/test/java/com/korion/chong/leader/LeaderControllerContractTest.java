@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.korion.chong.api.GlobalExceptionHandler;
+import com.korion.chong.notice.NoticeService;
+import com.korion.chong.settlement.SettlementService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -26,7 +28,10 @@ class LeaderControllerContractTest {
     @BeforeEach
     void setUp() {
         service = Mockito.mock(LeaderDashboardService.class);
-        LeaderController controller = new LeaderController(new AuthContextFactory(), service);
+        SignupApprovalService signupApprovalService = Mockito.mock(SignupApprovalService.class);
+        SettlementService settlementService = Mockito.mock(SettlementService.class);
+        NoticeService noticeService = Mockito.mock(NoticeService.class);
+        LeaderController controller = new LeaderController(new AuthContextFactory(), service, signupApprovalService, settlementService, noticeService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

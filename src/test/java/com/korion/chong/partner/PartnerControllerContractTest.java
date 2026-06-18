@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.korion.chong.api.GlobalExceptionHandler;
+import com.korion.chong.notice.NoticeService;
+import com.korion.chong.settlement.SettlementService;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,7 +26,9 @@ class PartnerControllerContractTest {
     @BeforeEach
     void setUp() {
         service = Mockito.mock(PartnerDashboardService.class);
-        PartnerController controller = new PartnerController(new PartnerAuthContextFactory(), service);
+        SettlementService settlementService = Mockito.mock(SettlementService.class);
+        NoticeService noticeService = Mockito.mock(NoticeService.class);
+        PartnerController controller = new PartnerController(new PartnerAuthContextFactory(), service, settlementService, noticeService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

@@ -351,6 +351,95 @@ paths:
           $ref: '#/components/responses/LeaderPageData'
         '403':
           $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/leader/settlement-requests:
+    post:
+      summary: Create a country leader settlement request
+      description: Recalculates available commission entries server-side and creates a REQUESTED distributor_settlement_requests row for the authenticated leader.
+      parameters:
+        - $ref: '#/components/parameters/LeaderIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettlementCreateRequest'
+      responses:
+        '200':
+          description: Settlement request created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementActionResponse'
+  /api/leader/settlement-requests/{settlementRequestId}/approve:
+    post:
+      summary: Approve a subordinate settlement request
+      description: Moves a manageable REQUESTED settlement request to APPROVED and marks linked commission entries APPROVED or HELD.
+      parameters:
+        - $ref: '#/components/parameters/LeaderIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/SettlementRequestIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettlementActionRequest'
+      responses:
+        '200':
+          description: Settlement request approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementActionResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/leader/settlement-requests/{settlementRequestId}/reject:
+    post:
+      summary: Reject a subordinate settlement request
+      description: Moves a manageable REQUESTED settlement request to REJECTED and marks linked commission entries REJECTED.
+      parameters:
+        - $ref: '#/components/parameters/LeaderIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/SettlementRequestIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettlementActionRequest'
+      responses:
+        '200':
+          description: Settlement request rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementActionResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/leader/settlement-requests/{settlementRequestId}/mark-paid:
+    post:
+      summary: Mark an approved subordinate settlement request as paid
+      description: Moves a manageable APPROVED settlement request to PAID and marks linked commission entries PAID.
+      parameters:
+        - $ref: '#/components/parameters/LeaderIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/SettlementRequestIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettlementActionRequest'
+      responses:
+        '200':
+          description: Settlement request marked paid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementActionResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
   /api/leader/hq-notices:
     get:
       summary: HQ notices visible to the leader
@@ -399,6 +488,28 @@ paths:
           $ref: '#/components/responses/LeaderPageData'
         '403':
           $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/leader/notices/send:
+    post:
+      summary: Send or schedule a leader notice to subordinate partners and merchants
+      description: Stores the notice body, recipient delivery rows, and activity log in one transaction. scheduledAt creates SCHEDULED/PENDING history; otherwise the notice is stored as SENT/SENT.
+      parameters:
+        - $ref: '#/components/parameters/LeaderIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoticeSendRequest'
+      responses:
+        '200':
+          description: Notice send request was stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoticeSendResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
   /api/leader/profile:
     get:
       summary: Leader profile page data
@@ -423,6 +534,52 @@ paths:
           $ref: '#/components/responses/LeaderPageData'
         '403':
           $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/leader/signup-applications/{applicationId}/approve:
+    post:
+      summary: Approve a partner or merchant signup application
+      description: Creates or connects runtime users plus the approved partners/merchants, distributor_contracts, and distributor_wallet_addresses records for a decisionable signup application.
+      parameters:
+        - $ref: '#/components/parameters/LeaderIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/ApplicationIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupApprovalDecisionRequest'
+      responses:
+        '200':
+          description: Signup application approved and runtime authority activated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupApprovalResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/leader/signup-applications/{applicationId}/reject:
+    post:
+      summary: Reject a partner or merchant signup application
+      description: Moves a decisionable signup application to REJECTED and records the decision activity.
+      parameters:
+        - $ref: '#/components/parameters/LeaderIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/ApplicationIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupApprovalDecisionRequest'
+      responses:
+        '200':
+          description: Signup application rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupRejectionResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
   /api/partner/dashboard:
     get:
       summary: Sales partner dashboard summary page data
@@ -439,7 +596,7 @@ paths:
   /api/partner/merchant-applications:
     get:
       summary: Merchant application summary for a sales partner
-      description: Returns only partner-owned data. Pending application ownership requires an explicit partner/application foreign key before real application rows can be exposed.
+      description: Returns only partner-owned merchant signup application rows using distributor_signup_applications.owner_partner_id as the server-side scope boundary.
       parameters:
         - $ref: '#/components/parameters/PartnerIdHeader'
         - $ref: '#/components/parameters/CountryScopesHeader'
@@ -523,6 +680,28 @@ paths:
           $ref: '#/components/responses/PartnerPageData'
         '403':
           $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/partner/settlements/requests:
+    post:
+      summary: Create a sales partner settlement request
+      description: Recalculates available commission entries server-side and creates a REQUESTED distributor_settlement_requests row for the authenticated sales partner.
+      parameters:
+        - $ref: '#/components/parameters/PartnerIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettlementCreateRequest'
+      responses:
+        '200':
+          description: Settlement request created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementActionResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
   /api/partner/hq-notices:
     get:
       summary: HQ notices visible to the sales partner
@@ -571,6 +750,28 @@ paths:
           $ref: '#/components/responses/PartnerPageData'
         '403':
           $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/partner/notices/outbox:
+    post:
+      summary: Send or schedule a sales partner notice to owned merchants
+      description: Stores the notice body, merchant recipient delivery rows, and activity log in one transaction. scheduledAt creates SCHEDULED/PENDING history; otherwise the notice is stored as SENT/SENT.
+      parameters:
+        - $ref: '#/components/parameters/PartnerIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoticeSendRequest'
+      responses:
+        '200':
+          description: Notice send request was stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoticeSendResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
   /api/partner/profile:
     get:
       summary: Sales partner profile page data
@@ -595,6 +796,137 @@ paths:
           $ref: '#/components/responses/PartnerPageData'
         '403':
           $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/merchant/dashboard:
+    get:
+      summary: Merchant dashboard page data
+      parameters:
+        - $ref: '#/components/parameters/MerchantIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/CountryScopeQuery'
+        - $ref: '#/components/parameters/PeriodQuery'
+      responses:
+        '200':
+          $ref: '#/components/responses/MerchantPageData'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/merchant/transactions:
+    get:
+      summary: Merchant own payment and transaction page data
+      parameters:
+        - $ref: '#/components/parameters/MerchantIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/CountryScopeQuery'
+        - $ref: '#/components/parameters/PeriodQuery'
+        - name: variant
+          in: query
+          schema:
+            type: string
+            enum:
+              - all
+              - refund
+            default: all
+      responses:
+        '200':
+          $ref: '#/components/responses/MerchantPageData'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/merchant/payments:
+    get:
+      summary: Alias for merchant own payment and transaction page data
+      parameters:
+        - $ref: '#/components/parameters/MerchantIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/CountryScopeQuery'
+        - $ref: '#/components/parameters/PeriodQuery'
+      responses:
+        '200':
+          $ref: '#/components/responses/MerchantPageData'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/merchant/store:
+    get:
+      summary: Merchant own store profile page data
+      parameters:
+        - $ref: '#/components/parameters/MerchantIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/CountryScopeQuery'
+      responses:
+        '200':
+          $ref: '#/components/responses/MerchantPageData'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/merchant/profile:
+    get:
+      summary: Merchant own account profile page data
+      parameters:
+        - $ref: '#/components/parameters/MerchantIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/CountryScopeQuery'
+      responses:
+        '200':
+          $ref: '#/components/responses/MerchantPageData'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/merchant/hq-notices:
+    get:
+      summary: Merchant received notices page data
+      parameters:
+        - $ref: '#/components/parameters/MerchantIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/CountryScopeQuery'
+      responses:
+        '200':
+          $ref: '#/components/responses/MerchantPageData'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/merchant/notices:
+    get:
+      summary: Alias for merchant received notices page data
+      parameters:
+        - $ref: '#/components/parameters/MerchantIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/CountryScopeQuery'
+      responses:
+        '200':
+          $ref: '#/components/responses/MerchantPageData'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/merchant/activity-logs:
+    get:
+      summary: Merchant own activity log page data
+      parameters:
+        - $ref: '#/components/parameters/MerchantIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/CountryScopeQuery'
+      responses:
+        '200':
+          $ref: '#/components/responses/MerchantPageData'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/merchant/settlements:
+    get:
+      summary: Merchant settlement history page data
+      parameters:
+        - $ref: '#/components/parameters/MerchantIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/CountryScopeQuery'
+      responses:
+        '200':
+          $ref: '#/components/responses/MerchantPageData'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/merchant/settlements/detail:
+    get:
+      summary: Merchant latest settlement detail page data
+      parameters:
+        - $ref: '#/components/parameters/MerchantIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - $ref: '#/components/parameters/CountryScopeQuery'
+      responses:
+        '200':
+          $ref: '#/components/responses/MerchantPageData'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
 components:
   parameters:
     LeaderIdHeader:
@@ -613,6 +945,14 @@ components:
         type: integer
         format: int64
       description: Temporary sales partner id until JWT auth is wired.
+    MerchantIdHeader:
+      name: X-Merchant-Id
+      in: header
+      required: true
+      schema:
+        type: integer
+        format: int64
+      description: Temporary merchant id until JWT auth is wired.
     CountryScopesHeader:
       name: X-Country-Scopes
       in: header
@@ -637,6 +977,22 @@ components:
         type: string
         pattern: '^\d{4}-\d{2}$'
       example: '2026-06'
+    ApplicationIdPath:
+      name: applicationId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    SettlementRequestIdPath:
+      name: settlementRequestId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
   responses:
     ForbiddenCountryScope:
       description: Requested countryScope is outside the authenticated role's server-side country scope.
@@ -656,6 +1012,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/PartnerPageDataResponse'
+    MerchantPageData:
+      description: Page data shaped for the current KORION PAY merchant admin frontend.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MerchantPageDataResponse'
   schemas:
     LeaderPageDataResponse:
       type: object
@@ -670,6 +1032,248 @@ components:
       description: >
         Transitional frontend page payload. Each partner page returns the same top-level
         keys used by its existing JSON fallback, scoped by X-Partner-Id and countryScope.
+    MerchantPageDataResponse:
+      type: object
+      additionalProperties: true
+      description: >
+        Transitional frontend page payload. Each merchant page returns the same top-level
+        keys used by its existing JSON fallback, scoped by X-Merchant-Id and countryScope.
+    SignupApprovalDecisionRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 2000
+        requestId:
+          type: string
+          maxLength: 128
+    SignupApprovalResponse:
+      type: object
+      properties:
+        applicationId:
+          type: integer
+          format: int64
+        applicantType:
+          type: string
+          enum:
+            - PARTNER
+            - MERCHANT
+        status:
+          type: string
+          enum:
+            - APPROVED
+        userId:
+          type: integer
+          format: int64
+        partnerId:
+          type: integer
+          format: int64
+          nullable: true
+        merchantId:
+          type: integer
+          format: int64
+          nullable: true
+        contractId:
+          type: integer
+          format: int64
+          nullable: true
+        walletAddressId:
+          type: integer
+          format: int64
+          nullable: true
+        resultCode:
+          type: string
+          enum:
+            - SIGNUP_APPLICATION_APPROVED
+        messageKey:
+          type: string
+    SignupRejectionResponse:
+      type: object
+      properties:
+        applicationId:
+          type: integer
+          format: int64
+        applicantType:
+          type: string
+          enum:
+            - PARTNER
+            - MERCHANT
+        status:
+          type: string
+          enum:
+            - REJECTED
+        resultCode:
+          type: string
+          enum:
+            - SIGNUP_APPLICATION_REJECTED
+        messageKey:
+          type: string
+    SettlementCreateRequest:
+      type: object
+      required:
+        - periodStart
+        - periodEnd
+        - requestedAmount
+      properties:
+        periodStart:
+          type: string
+          format: date
+        periodEnd:
+          type: string
+          format: date
+        requestedAmount:
+          type: number
+          minimum: 0.000000000000000001
+        walletAddressId:
+          type: integer
+          format: int64
+          nullable: true
+        memo:
+          type: string
+          maxLength: 2000
+        requestId:
+          type: string
+          maxLength: 128
+    SettlementActionRequest:
+      type: object
+      properties:
+        amount:
+          type: number
+          minimum: 0.000000000000000001
+          nullable: true
+        reason:
+          type: string
+          maxLength: 2000
+        requestId:
+          type: string
+          maxLength: 128
+    SettlementActionResponse:
+      type: object
+      properties:
+        settlementRequestId:
+          type: integer
+          format: int64
+        requestNo:
+          type: string
+        recipientType:
+          type: string
+          enum:
+            - LEADER
+            - PARTNER
+            - MERCHANT
+        recipientPartnerId:
+          type: integer
+          format: int64
+          nullable: true
+        recipientMerchantId:
+          type: integer
+          format: int64
+          nullable: true
+        requestedAmount:
+          type: number
+        approvedAmount:
+          type: number
+        heldAmount:
+          type: number
+        status:
+          type: string
+          enum:
+            - REQUESTED
+            - APPROVED
+            - REJECTED
+            - PAID
+        resultCode:
+          type: string
+          enum:
+            - SETTLEMENT_REQUEST_CREATED
+            - SETTLEMENT_REQUEST_APPROVED
+            - SETTLEMENT_REQUEST_REJECTED
+            - SETTLEMENT_REQUEST_PAID
+        messageKey:
+          type: string
+    NoticeRecipientRequest:
+      type: object
+      required:
+        - recipientType
+      properties:
+        recipientType:
+          type: string
+          enum:
+            - PARTNER
+            - MERCHANT
+        recipientPartnerId:
+          type: integer
+          format: int64
+          nullable: true
+        recipientMerchantId:
+          type: integer
+          format: int64
+          nullable: true
+    NoticeSendRequest:
+      type: object
+      required:
+        - title
+        - noticeType
+        - body
+        - channel
+        - recipients
+      properties:
+        title:
+          type: string
+          maxLength: 255
+        noticeType:
+          type: string
+          maxLength: 64
+        body:
+          type: string
+        channel:
+          type: string
+          enum:
+            - IN_APP
+            - EMAIL
+            - SMS
+            - PUSH
+        scheduledAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Must be later than the server clock when provided.
+        recipients:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/NoticeRecipientRequest'
+        requestId:
+          type: string
+          maxLength: 128
+    NoticeSendResponse:
+      type: object
+      properties:
+        noticeId:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum:
+            - SENT
+            - SCHEDULED
+        scheduledAt:
+          type: string
+          format: date-time
+          nullable: true
+        sentAt:
+          type: string
+          format: date-time
+          nullable: true
+        recipientCount:
+          type: integer
+        resultCode:
+          type: string
+          enum:
+            - NOTICE_SENT
+            - NOTICE_SEND_SCHEDULED
+        messageKey:
+          type: string
     LoginRequest:
       type: object
       required:
