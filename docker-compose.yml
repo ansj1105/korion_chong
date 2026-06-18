@@ -1,0 +1,15 @@
+services:
+  korion-chong-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: korion-chong-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 8080
+      JAVA_OPTS: ${JAVA_OPTS:-"-Xms128m -Xmx512m -XX:MaxRAMPercentage=70"}
+    ports:
+      - "${KORION_CHONG_BIND_ADDRESS:-127.0.0.1}:${KORION_CHONG_HOST_PORT:-18082}:8080"
+    mem_limit: ${KORION_CHONG_MEM_LIMIT:-768m}
