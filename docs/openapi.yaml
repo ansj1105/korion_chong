@@ -116,7 +116,7 @@ paths:
   /api/auth/signup-applications:
     post:
       summary: Submit public partner or merchant signup application
-      description: Creates a distributor_signup_applications row only. It does not create users, partners, merchants, or login authority.
+      description: Creates a partner_applications row only. It does not create users, partners, merchants, or login authority.
       requestBody:
         required: true
         content:
@@ -404,7 +404,7 @@ components:
           maxLength: 80
         walletAddress:
           type: string
-          description: TRON address. Stored only in distributor_signup_applications until approval.
+          description: TRON address. Stored only in partner_applications until approval.
         integrationPlan:
           type: string
           maxLength: 4000
