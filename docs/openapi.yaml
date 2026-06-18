@@ -1,0 +1,436 @@
+openapi: 3.0.3
+info:
+  title: KORION Chong API
+  version: 0.1.0
+paths:
+  /api/auth/availability:
+    get:
+      summary: Check signup field availability
+      parameters:
+        - name: field
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - loginId
+              - email
+              - walletAddress
+        - name: value
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Availability result for frontend modal/toast handling.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityResponse'
+  /api/auth/referral-codes/{code}/validate:
+    get:
+      summary: Validate a leader or partner referral code
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Referral code validation result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferralCodeValidationResponse'
+  /api/auth/signup-applications:
+    post:
+      summary: Submit public partner or merchant signup application
+      description: Creates a distributor_signup_applications row only. It does not create users, partners, merchants, or login authority.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupApplicationRequest'
+      responses:
+        '200':
+          description: Signup application submitted for review.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupApplicationResponse'
+  /api/leader/dashboard:
+    get:
+      summary: Country leader dashboard summary
+      parameters:
+        - $ref: '#/components/parameters/LeaderIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - name: period
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+          example: '2026-06'
+        - name: countryScope
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 2
+          example: KR
+      responses:
+        '200':
+          description: Dashboard summary scoped to the authenticated country leader.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderDashboardResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+  /api/leader/partners:
+    get:
+      summary: Approved sales partners under a country leader
+      parameters:
+        - $ref: '#/components/parameters/LeaderIdHeader'
+        - $ref: '#/components/parameters/CountryScopesHeader'
+        - name: countryScope
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 2
+          example: KR
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - SALES_PARTNER_APPROVED
+        - name: region
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Approved sales partner page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderPartnerResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenCountryScope'
+components:
+  parameters:
+    LeaderIdHeader:
+      name: X-Leader-Id
+      in: header
+      required: true
+      schema:
+        type: integer
+        format: int64
+      description: Temporary leader partner id until JWT auth is wired.
+    CountryScopesHeader:
+      name: X-Country-Scopes
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Temporary comma-separated country scopes until JWT auth is wired.
+  responses:
+    ForbiddenCountryScope:
+      description: Requested countryScope is outside the leader's server-side country scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+  schemas:
+    AvailabilityResponse:
+      type: object
+      properties:
+        available:
+          type: boolean
+        field:
+          type: string
+        resultCode:
+          type: string
+          enum:
+            - AVAILABLE
+            - DUPLICATE
+        messageKey:
+          type: string
+    ReferralCodeValidationResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        code:
+          type: string
+        codeType:
+          type: string
+        ownerPartnerId:
+          type: integer
+          format: int64
+        country:
+          type: string
+        city:
+          type: string
+        resultCode:
+          type: string
+        messageKey:
+          type: string
+    SignupApplicationRequest:
+      type: object
+      required:
+        - applicantType
+        - loginId
+        - email
+        - companyName
+        - contactName
+      properties:
+        applicantType:
+          type: string
+          enum:
+            - PARTNER
+            - MERCHANT
+        loginId:
+          type: string
+          maxLength: 50
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        companyName:
+          type: string
+          maxLength: 160
+        contactName:
+          type: string
+          maxLength: 120
+        phone:
+          type: string
+          maxLength: 80
+        referralCode:
+          type: string
+          maxLength: 64
+        country:
+          type: string
+          pattern: '^[A-Z]{2}$'
+        region:
+          type: string
+          maxLength: 100
+        city:
+          type: string
+          maxLength: 100
+        walletAddress:
+          type: string
+          description: TRON address. Stored only in distributor_signup_applications until approval.
+        integrationPlan:
+          type: string
+          maxLength: 4000
+        requestId:
+          type: string
+          maxLength: 128
+    SignupApplicationResponse:
+      type: object
+      properties:
+        applicationId:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum:
+            - SUBMITTED
+        resultCode:
+          type: string
+          enum:
+            - SIGNUP_APPLICATION_SUBMITTED
+        messageKey:
+          type: string
+        walletStored:
+          type: boolean
+          description: true only when the application table stores the submitted wallet address; no authority is granted.
+    ApiErrorResponse:
+      type: object
+      required:
+        - timestamp
+        - code
+        - message
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        code:
+          type: string
+        message:
+          type: string
+    LeaderDashboardResponse:
+      type: object
+      required:
+        - leaderProfile
+        - kpis
+        - organizationSummary
+        - monthlyVolume
+        - feeSummary
+        - riskAlerts
+      properties:
+        leaderProfile:
+          $ref: '#/components/schemas/LeaderProfile'
+        kpis:
+          $ref: '#/components/schemas/LeaderKpis'
+        organizationSummary:
+          $ref: '#/components/schemas/OrganizationSummary'
+        monthlyVolume:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthlyVolume'
+        feeSummary:
+          $ref: '#/components/schemas/FeeSummary'
+        riskAlerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskAlert'
+    LeaderProfile:
+      type: object
+      properties:
+        leaderId:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+          format: int64
+        loginId:
+          type: string
+        status:
+          type: string
+          enum:
+            - COUNTRY_LEADER_APPROVED
+        countryScopes:
+          type: array
+          items:
+            type: string
+    LeaderKpis:
+      type: object
+      properties:
+        approvedPartnerCount:
+          type: integer
+          format: int64
+        approvedMerchantCount:
+          type: integer
+          format: int64
+        completedTransactionAmount:
+          type: string
+          format: decimal
+        confirmedCommissionAmount:
+          type: string
+          format: decimal
+    OrganizationSummary:
+      type: object
+      properties:
+        partnerCount:
+          type: integer
+          format: int64
+        merchantCount:
+          type: integer
+          format: int64
+    MonthlyVolume:
+      type: object
+      properties:
+        month:
+          type: string
+          example: '2026-06'
+        amount:
+          type: string
+          format: decimal
+        transactionCount:
+          type: integer
+          format: int64
+    FeeSummary:
+      type: object
+      properties:
+        countryLeaderFee:
+          type: string
+          format: decimal
+        salesPartnerFee:
+          type: string
+          format: decimal
+        korionFee:
+          type: string
+          format: decimal
+    RiskAlert:
+      type: object
+      properties:
+        type:
+          type: string
+        severity:
+          type: string
+        message:
+          type: string
+    LeaderPartnerResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartnerSummary'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+    PartnerSummary:
+      type: object
+      properties:
+        partnerId:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+          format: int64
+        loginId:
+          type: string
+        country:
+          type: string
+        region:
+          type: string
+        city:
+          type: string
+        status:
+          type: string
+          enum:
+            - SALES_PARTNER_APPROVED
+        merchantCount:
+          type: integer
+          format: int64
+        completedTransactionAmount:
+          type: string
+          format: decimal
+        lastActivityAt:
+          type: string
+          format: date-time
+    PageMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        size:
+          type: integer
+        totalItems:
+          type: integer
+          format: int64
