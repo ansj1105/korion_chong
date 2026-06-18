@@ -3,15 +3,32 @@ package com.korion.chong.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 class AuthServiceTest {
     private final FakeAuthRepository repository = new FakeAuthRepository();
-    private final AuthService service = new AuthService(repository);
+    private final FakeWalletSignatureVerifier walletSignatureVerifier = new FakeWalletSignatureVerifier();
+    private final AuthService service = new AuthService(
+            repository,
+            new VerificationCodeGenerator() {
+                @Override
+                public String generateSixDigitCode() {
+                    return "123456";
+                }
+            },
+            walletSignatureVerifier,
+            new FakePasswordEncoder(),
+            Clock.fixed(Instant.parse("2026-06-18T00:00:00Z"), ZoneOffset.UTC)
+    );
 
     @Test
     void signupApplicationCreatesSeparateApplicationWithoutGrantingUserAuthority() {
+        repository.emailVerified = true;
         repository.referral = new ReferralCodeValidationResponse(
                 true,
                 "LEADER-KR",
@@ -26,24 +43,32 @@ class AuthServiceTest {
         SignupApplicationResponse response = service.createSignupApplication(new SignupApplicationRequest(
                 "PARTNER",
                 "partner01",
+                "password123",
                 "partner@example.com",
                 "Partner Co",
                 "Partner Owner",
                 "010-0000-0000",
+                "@partner01",
+                "+821000000000",
                 "LEADER-KR",
                 "KR",
                 "Seoul",
                 "Seoul",
+                null,
+                null,
                 "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
                 "regional sales plan",
+                null,
                 "req-1"
         ));
 
         assertThat(response.applicationId()).isEqualTo(123L);
-        assertThat(response.status()).isEqualTo("SUBMITTED");
+        assertThat(response.status()).isEqualTo("REQUESTED");
         assertThat(response.walletStored()).isTrue();
         assertThat(repository.created).isTrue();
         assertThat(repository.createdUser).isFalse();
+        assertThat(repository.passwordHash).isEqualTo("hashed-password123");
+        assertThat(repository.passwordHash).doesNotContain("Partner Co");
         assertThat(repository.activityTargetType).isEqualTo("distributor_signup_applications");
     }
 
@@ -58,18 +83,25 @@ class AuthServiceTest {
 
     @Test
     void signupApplicationRejectsInvalidWalletAddress() {
+        repository.emailVerified = true;
         SignupApplicationRequest request = new SignupApplicationRequest(
                 "MERCHANT",
                 "merchant01",
+                "password123",
                 "merchant@example.com",
                 "Merchant Store",
                 "Merchant Owner",
                 null,
                 null,
+                null,
+                null,
                 "KR",
                 null,
                 "Seoul",
+                "Seoul address",
+                "Retail",
                 "not-tron",
+                null,
                 null,
                 "req-2"
         );
@@ -79,16 +111,70 @@ class AuthServiceTest {
                 .hasMessageContaining("walletAddress");
     }
 
+    @Test
+    void signupApplicationRequiresVerifiedEmail() {
+        assertThatThrownBy(() -> service.createSignupApplication(validRequest()))
+                .isInstanceOf(AuthValidationException.class)
+                .hasMessageContaining("email verification");
+    }
+
+    @Test
+    void sendEmailVerificationStoresOnlyCodeHash() {
+        EmailVerificationSendResponse response = service.sendEmailVerification(
+                new EmailVerificationSendRequest("partner@example.com", "req-email")
+        );
+
+        assertThat(response.resultCode()).isEqualTo("EMAIL_VERIFICATION_SENT");
+        assertThat(repository.emailCodeHash).isEqualTo(HashingSupport.sha256("123456"));
+        assertThat(repository.emailCodeHash).doesNotContain("123456");
+    }
+
+    @Test
+    void confirmEmailVerificationReturnsVerifiedResult() {
+        repository.emailConfirmResult = true;
+
+        EmailVerificationConfirmResponse response = service.confirmEmailVerification(
+                new EmailVerificationConfirmRequest("partner@example.com", "123456", "req-email")
+        );
+
+        assertThat(response.verified()).isTrue();
+    }
+
+    @Test
+    void walletVerificationStoresSignatureHashOnly() {
+        walletSignatureVerifier.result = true;
+
+        WalletLinkVerifyResponse response = service.verifyWalletLink(new WalletLinkVerifyRequest(
+                "PARTNER",
+                "partner@example.com",
+                "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
+                "nonce-1",
+                "raw-signature",
+                "req-wallet"
+        ));
+
+        assertThat(response.verified()).isTrue();
+        assertThat(repository.walletStatus).isEqualTo("VERIFIED");
+        assertThat(repository.signatureHash).isEqualTo(HashingSupport.sha256("raw-signature"));
+        assertThat(repository.signatureHash).doesNotContain("raw-signature");
+    }
+
     private SignupApplicationRequest validRequest() {
         return new SignupApplicationRequest(
                 "PARTNER",
                 "partner01",
+                "password123",
                 "partner@example.com",
                 "Partner Co",
                 "Partner Owner",
                 null,
                 null,
+                null,
+                null,
                 "KR",
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -101,6 +187,12 @@ class AuthServiceTest {
         boolean loginIdExists;
         boolean created;
         boolean createdUser;
+        boolean emailVerified;
+        boolean emailConfirmResult;
+        String emailCodeHash;
+        String signatureHash;
+        String passwordHash;
+        String walletStatus;
         String activityTargetType;
         ReferralCodeValidationResponse referral;
 
@@ -115,6 +207,16 @@ class AuthServiceTest {
         }
 
         @Override
+        public boolean telegramExists(String telegram) {
+            return false;
+        }
+
+        @Override
+        public boolean whatsappExists(String whatsapp) {
+            return false;
+        }
+
+        @Override
         public boolean walletAddressExists(String walletAddress) {
             return false;
         }
@@ -125,14 +227,57 @@ class AuthServiceTest {
         }
 
         @Override
-        public long createSignupApplication(SignupApplicationRequest request) {
+        public void createEmailVerification(String email, String codeHash, Instant expiresAt, String requestId) {
+            emailCodeHash = codeHash;
+        }
+
+        @Override
+        public boolean confirmEmailVerification(String email, String codeHash, Instant now) {
+            return emailConfirmResult;
+        }
+
+        @Override
+        public boolean emailVerified(String email) {
+            return emailVerified;
+        }
+
+        @Override
+        public void recordWalletVerification(WalletLinkVerifyRequest request, String signatureHash, String status, String errorCode, String errorMessage) {
+            this.signatureHash = signatureHash;
+            this.walletStatus = status;
+        }
+
+        @Override
+        public long createSignupApplication(SignupApplicationRequest request, String passwordHash) {
             created = true;
+            this.passwordHash = passwordHash;
             return 123L;
         }
 
         @Override
         public void recordActivity(String role, String actionType, String status, String targetType, Long targetId, String requestId) {
             activityTargetType = targetType;
+        }
+    }
+
+    private static class FakeWalletSignatureVerifier implements WalletSignatureVerifier {
+        boolean result;
+
+        @Override
+        public boolean verifyTronSignature(String address, String nonce, String signature) {
+            return result;
+        }
+    }
+
+    private static class FakePasswordEncoder implements PasswordEncoder {
+        @Override
+        public String encode(CharSequence rawPassword) {
+            return "hashed-" + rawPassword;
+        }
+
+        @Override
+        public boolean matches(CharSequence rawPassword, String encodedPassword) {
+            return encode(rawPassword).equals(encodedPassword);
         }
     }
 }

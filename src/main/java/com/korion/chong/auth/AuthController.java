@@ -30,6 +30,21 @@ public class AuthController {
         return service.validateReferralCode(code);
     }
 
+    @PostMapping("/email-verifications/send")
+    public EmailVerificationSendResponse sendEmailVerification(@Valid @RequestBody EmailVerificationSendRequest request) {
+        return service.sendEmailVerification(request);
+    }
+
+    @PostMapping("/email-verifications/confirm")
+    public EmailVerificationConfirmResponse confirmEmailVerification(@Valid @RequestBody EmailVerificationConfirmRequest request) {
+        return service.confirmEmailVerification(request);
+    }
+
+    @PostMapping("/wallet-links/verify")
+    public WalletLinkVerifyResponse verifyWalletLink(@Valid @RequestBody WalletLinkVerifyRequest request) {
+        return service.verifyWalletLink(request);
+    }
+
     @PostMapping("/signup-applications")
     public SignupApplicationResponse createSignupApplication(@Valid @RequestBody SignupApplicationRequest request) {
         return service.createSignupApplication(request);

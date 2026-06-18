@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.korion.chong.api.GlobalExceptionHandler;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,48 @@ class LeaderControllerContractTest {
                 .andExpect(jsonPath("$.leaderProfile.leaderId", equalTo(10)))
                 .andExpect(jsonPath("$.kpis.approvedPartnerCount", equalTo(1)))
                 .andExpect(jsonPath("$.organizationSummary.merchantCount", equalTo(2)));
+    }
+
+    @Test
+    void partnersReturnsContractShape() throws Exception {
+        when(service.getPartners(
+                any(AuthContext.class),
+                eq("KR"),
+                eq("partner"),
+                eq("SALES_PARTNER_APPROVED"),
+                eq("Seoul"),
+                eq(0),
+                eq(20)
+        )).thenReturn(new LeaderPartnerResponse(
+                List.of(new LeaderPartnerResponse.PartnerSummary(
+                        20L,
+                        200L,
+                        "partner.kr",
+                        "KR",
+                        "Seoul",
+                        "Gangnam",
+                        "SALES_PARTNER_APPROVED",
+                        3,
+                        new BigDecimal("1200.50"),
+                        Instant.parse("2026-06-18T00:00:00Z")
+                )),
+                new LeaderPartnerResponse.PageMeta(0, 20, 1)
+        ));
+
+        mockMvc.perform(get("/api/leader/partners")
+                        .header("X-Leader-Id", "10")
+                        .header("X-Country-Scopes", "KR")
+                        .queryParam("countryScope", "KR")
+                        .queryParam("keyword", "partner")
+                        .queryParam("status", "SALES_PARTNER_APPROVED")
+                        .queryParam("region", "Seoul")
+                        .queryParam("page", "0")
+                        .queryParam("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].partnerId", equalTo(20)))
+                .andExpect(jsonPath("$.items[0].loginId", equalTo("partner.kr")))
+                .andExpect(jsonPath("$.items[0].merchantCount", equalTo(3)))
+                .andExpect(jsonPath("$.page.totalItems", equalTo(1)));
     }
 
     @Test

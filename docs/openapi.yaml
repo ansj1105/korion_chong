@@ -15,6 +15,8 @@ paths:
             enum:
               - loginId
               - email
+              - telegram
+              - whatsapp
               - walletAddress
         - name: value
           in: query
@@ -44,6 +46,56 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReferralCodeValidationResponse'
+  /api/auth/email-verifications/send:
+    post:
+      summary: Send distributor signup email verification code
+      description: Stores only a code hash in distributor_signup_email_verifications. The raw code must be delivered by the configured mail adapter.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailVerificationSendRequest'
+      responses:
+        '200':
+          description: Verification code was created for delivery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailVerificationSendResponse'
+  /api/auth/email-verifications/confirm:
+    post:
+      summary: Confirm distributor signup email verification code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailVerificationConfirmRequest'
+      responses:
+        '200':
+          description: Email verification result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailVerificationConfirmResponse'
+  /api/auth/wallet-links/verify:
+    post:
+      summary: Verify KORION WALLET TRX address ownership for signup
+      description: Stores only a signature hash and verification result in distributor_signup_wallet_verifications.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WalletLinkVerifyRequest'
+      responses:
+        '200':
+          description: Wallet verification result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletLinkVerifyResponse'
   /api/auth/signup-applications:
     post:
       summary: Submit public partner or merchant signup application
@@ -204,6 +256,7 @@ components:
       required:
         - applicantType
         - loginId
+        - password
         - email
         - companyName
         - contactName
@@ -216,10 +269,18 @@ components:
         loginId:
           type: string
           maxLength: 50
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+          writeOnly: true
+          description: Raw password is accepted only for signup submission and stored as password_hash on the inactive application record.
         email:
           type: string
           format: email
           maxLength: 255
+          description: Must have a VERIFIED row in distributor_signup_email_verifications before submission.
         companyName:
           type: string
           maxLength: 160
@@ -227,6 +288,12 @@ components:
           type: string
           maxLength: 120
         phone:
+          type: string
+          maxLength: 80
+        telegram:
+          type: string
+          maxLength: 120
+        whatsapp:
           type: string
           maxLength: 80
         referralCode:
@@ -241,10 +308,19 @@ components:
         city:
           type: string
           maxLength: 100
+        address:
+          type: string
+          maxLength: 1000
+        businessType:
+          type: string
+          maxLength: 80
         walletAddress:
           type: string
           description: TRON address. Stored only in distributor_signup_applications until approval.
         integrationPlan:
+          type: string
+          maxLength: 4000
+        evidenceNote:
           type: string
           maxLength: 4000
         requestId:
@@ -259,7 +335,7 @@ components:
         status:
           type: string
           enum:
-            - SUBMITTED
+            - REQUESTED
         resultCode:
           type: string
           enum:
@@ -269,6 +345,102 @@ components:
         walletStored:
           type: boolean
           description: true only when the application table stores the submitted wallet address; no authority is granted.
+    EmailVerificationSendRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        requestId:
+          type: string
+          maxLength: 128
+    EmailVerificationSendResponse:
+      type: object
+      properties:
+        resultCode:
+          type: string
+          enum:
+            - EMAIL_VERIFICATION_SENT
+        messageKey:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    EmailVerificationConfirmRequest:
+      type: object
+      required:
+        - email
+        - code
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        code:
+          type: string
+          pattern: '^\d{6}$'
+        requestId:
+          type: string
+          maxLength: 128
+    EmailVerificationConfirmResponse:
+      type: object
+      properties:
+        verified:
+          type: boolean
+        resultCode:
+          type: string
+          enum:
+            - EMAIL_VERIFIED
+        messageKey:
+          type: string
+    WalletLinkVerifyRequest:
+      type: object
+      required:
+        - applicantType
+        - walletAddress
+        - nonce
+        - signature
+      properties:
+        applicantType:
+          type: string
+          enum:
+            - PARTNER
+            - MERCHANT
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        walletAddress:
+          type: string
+          description: KORION WALLET TRX address.
+        nonce:
+          type: string
+          maxLength: 128
+        signature:
+          type: string
+          maxLength: 4096
+          description: Raw signature is verified but never stored; only SHA-256 hash is persisted.
+        requestId:
+          type: string
+          maxLength: 128
+    WalletLinkVerifyResponse:
+      type: object
+      properties:
+        verified:
+          type: boolean
+        authStatus:
+          type: string
+          enum:
+            - VERIFIED
+        resultCode:
+          type: string
+          enum:
+            - WALLET_VERIFIED
+        messageKey:
+          type: string
     ApiErrorResponse:
       type: object
       required:
