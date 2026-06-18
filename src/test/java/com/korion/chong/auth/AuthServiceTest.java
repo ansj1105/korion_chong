@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -159,6 +160,59 @@ class AuthServiceTest {
         assertThat(repository.signatureHash).doesNotContain("raw-signature");
     }
 
+    @Test
+    void loginReturnsRoleScopedRedirectAndCountryScope() {
+        repository.credential = new UserCredential(100L, "leader01", "hashed-password123", "ACTIVE");
+        repository.roleContext = new LoginRoleContext("LEADER", 10L, null, List.of("KR"));
+
+        LoginResponse response = service.login(new LoginRequest(
+                "leader01",
+                "password123",
+                "LEADER",
+                "req-login"
+        ));
+
+        assertThat(response.authenticated()).isTrue();
+        assertThat(response.userId()).isEqualTo(100L);
+        assertThat(response.partnerId()).isEqualTo(10L);
+        assertThat(response.countryScopes()).containsExactly("KR");
+        assertThat(response.redirectPath()).isEqualTo("/leader/dashboard");
+        assertThat(response.requiresTwoFactor()).isFalse();
+        assertThat(response.sessionExpiresAt()).isNull();
+        assertThat(repository.activityStatus).isEqualTo("SUCCESS");
+        assertThat(repository.activityTargetType).isEqualTo("users");
+    }
+
+    @Test
+    void loginRejectsPasswordMismatch() {
+        repository.credential = new UserCredential(100L, "leader01", "hashed-password123", "ACTIVE");
+
+        assertThatThrownBy(() -> service.login(new LoginRequest(
+                "leader01",
+                "wrong-password",
+                "LEADER",
+                "req-login"
+        )))
+                .isInstanceOf(AuthValidationException.class)
+                .hasMessageContaining("password");
+        assertThat(repository.activityStatus).isEqualTo("FAILED");
+    }
+
+    @Test
+    void loginRejectsUnapprovedRole() {
+        repository.credential = new UserCredential(100L, "leader01", "hashed-password123", "ACTIVE");
+
+        assertThatThrownBy(() -> service.login(new LoginRequest(
+                "leader01",
+                "password123",
+                "PARTNER",
+                "req-login"
+        )))
+                .isInstanceOf(AuthValidationException.class)
+                .hasMessageContaining("role");
+        assertThat(repository.activityStatus).isEqualTo("FAILED");
+    }
+
     private SignupApplicationRequest validRequest() {
         return new SignupApplicationRequest(
                 "PARTNER",
@@ -194,7 +248,21 @@ class AuthServiceTest {
         String passwordHash;
         String walletStatus;
         String activityTargetType;
+        String activityStatus;
         ReferralCodeValidationResponse referral;
+        UserCredential credential;
+        LoginRoleContext roleContext;
+
+        @Override
+        public Optional<UserCredential> findUserCredential(String loginId) {
+            return Optional.ofNullable(credential);
+        }
+
+        @Override
+        public Optional<LoginRoleContext> findApprovedRoleContext(long userId, String role) {
+            return Optional.ofNullable(roleContext)
+                    .filter(context -> context.role().equals(role));
+        }
 
         @Override
         public boolean loginIdExists(String loginId) {
@@ -257,6 +325,7 @@ class AuthServiceTest {
         @Override
         public void recordActivity(String role, String actionType, String status, String targetType, Long targetId, String requestId) {
             activityTargetType = targetType;
+            activityStatus = status;
         }
     }
 

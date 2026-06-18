@@ -3,6 +3,23 @@ info:
   title: KORION Chong API
   version: 0.1.0
 paths:
+  /api/auth/login:
+    post:
+      summary: Authenticate an approved leader, partner, or merchant account
+      description: Verifies users credentials and returns role-scoped routing metadata. It does not create authority from signup applications and does not issue a session token until session policy is finalized.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login succeeded for the selected approved role.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
   /api/auth/availability:
     get:
       summary: Check signup field availability
@@ -217,6 +234,77 @@ components:
           schema:
             $ref: '#/components/schemas/ApiErrorResponse'
   schemas:
+    LoginRequest:
+      type: object
+      required:
+        - loginId
+        - password
+        - role
+      properties:
+        loginId:
+          type: string
+          maxLength: 50
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+          writeOnly: true
+        role:
+          type: string
+          enum:
+            - LEADER
+            - PARTNER
+            - MERCHANT
+        requestId:
+          type: string
+          maxLength: 128
+    LoginResponse:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+        userId:
+          type: integer
+          format: int64
+        role:
+          type: string
+          enum:
+            - LEADER
+            - PARTNER
+            - MERCHANT
+        partnerId:
+          type: integer
+          format: int64
+          nullable: true
+        merchantId:
+          type: integer
+          format: int64
+          nullable: true
+        countryScopes:
+          type: array
+          items:
+            type: string
+        redirectPath:
+          type: string
+          enum:
+            - /leader/dashboard
+            - /partner/dashboard
+            - /merchant/dashboard
+        requiresTwoFactor:
+          type: boolean
+          description: false until the 2FA method and challenge contract are finalized.
+        sessionExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: null until session issuance policy is finalized.
+        resultCode:
+          type: string
+          enum:
+            - LOGIN_SUCCESS
+        messageKey:
+          type: string
     AvailabilityResponse:
       type: object
       properties:

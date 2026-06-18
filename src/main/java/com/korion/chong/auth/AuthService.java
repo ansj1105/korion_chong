@@ -3,6 +3,7 @@ package com.korion.chong.auth;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +49,49 @@ public class AuthService {
     public ReferralCodeValidationResponse validateReferralCode(String code) {
         return repository.findReferralCode(code)
                 .orElseGet(() -> ReferralCodeValidationResponse.invalid(code));
+    }
+
+    @Transactional
+    public LoginResponse login(LoginRequest request) {
+        Optional<UserCredential> credential = repository.findUserCredential(request.loginId());
+        if (credential.isEmpty() || !passwordEncoder.matches(request.password(), credential.get().passwordHash())) {
+            credential.ifPresent(user -> repository.recordActivity(
+                    request.role(),
+                    "LOGIN",
+                    "FAILED",
+                    "users",
+                    user.userId(),
+                    request.requestId()
+            ));
+            throw new AuthValidationException("INVALID_CREDENTIALS", "loginId or password is invalid");
+        }
+
+        UserCredential user = credential.get();
+        if (!"ACTIVE".equals(user.status())) {
+            repository.recordActivity(request.role(), "LOGIN", "FAILED", "users", user.userId(), request.requestId());
+            throw new AuthValidationException("ACCOUNT_INACTIVE", "account is not active");
+        }
+
+        LoginRoleContext context = repository.findApprovedRoleContext(user.userId(), request.role())
+                .orElseThrow(() -> {
+                    repository.recordActivity(request.role(), "LOGIN", "FAILED", "users", user.userId(), request.requestId());
+                    return new AuthValidationException("ROLE_NOT_APPROVED", "selected role is not approved for this account");
+                });
+
+        repository.recordActivity(request.role(), "LOGIN", "SUCCESS", "users", user.userId(), request.requestId());
+        return new LoginResponse(
+                true,
+                user.userId(),
+                context.role(),
+                context.partnerId(),
+                context.merchantId(),
+                context.countryScopes(),
+                redirectPath(context.role()),
+                false,
+                null,
+                "LOGIN_SUCCESS",
+                "auth.login.success"
+        );
     }
 
     @Transactional
@@ -168,6 +212,15 @@ public class AuthService {
         return switch (field) {
             case "loginId", "email", "telegram", "whatsapp", "walletAddress" -> field;
             default -> throw new AuthValidationException("UNSUPPORTED_FIELD", "Unsupported availability field: " + field);
+        };
+    }
+
+    private String redirectPath(String role) {
+        return switch (role) {
+            case "LEADER" -> "/leader/dashboard";
+            case "PARTNER" -> "/partner/dashboard";
+            case "MERCHANT" -> "/merchant/dashboard";
+            default -> throw new AuthValidationException("UNSUPPORTED_ROLE", "Unsupported login role: " + role);
         };
     }
 }

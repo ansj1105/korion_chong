@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.korion.chong.api.GlobalExceptionHandler;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -188,5 +189,40 @@ class AuthControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.verified", equalTo(true)))
                 .andExpect(jsonPath("$.authStatus", equalTo("VERIFIED")));
+    }
+
+    @Test
+    void loginReturnsContractShape() throws Exception {
+        when(service.login(any(LoginRequest.class)))
+                .thenReturn(new LoginResponse(
+                        true,
+                        100L,
+                        "LEADER",
+                        10L,
+                        null,
+                        List.of("KR"),
+                        "/leader/dashboard",
+                        false,
+                        null,
+                        "LOGIN_SUCCESS",
+                        "auth.login.success"
+                ));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest(
+                                "leader01",
+                                "password123",
+                                "LEADER",
+                                "req-login"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated", equalTo(true)))
+                .andExpect(jsonPath("$.role", equalTo("LEADER")))
+                .andExpect(jsonPath("$.partnerId", equalTo(10)))
+                .andExpect(jsonPath("$.countryScopes[0]", equalTo("KR")))
+                .andExpect(jsonPath("$.redirectPath", equalTo("/leader/dashboard")))
+                .andExpect(jsonPath("$.requiresTwoFactor", equalTo(false)))
+                .andExpect(jsonPath("$.resultCode", equalTo("LOGIN_SUCCESS")));
     }
 }

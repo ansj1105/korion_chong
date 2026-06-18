@@ -49,4 +49,9 @@ public class AuthController {
     public SignupApplicationResponse createSignupApplication(@Valid @RequestBody SignupApplicationRequest request) {
         return service.createSignupApplication(request);
     }
+
+    @PostMapping("/login")
+    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
+        return service.login(request);
+    }
 }

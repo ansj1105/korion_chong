@@ -3,6 +3,10 @@ package com.korion.chong.auth;
 import java.util.Optional;
 
 public interface AuthRepository {
+    Optional<UserCredential> findUserCredential(String loginId);
+
+    Optional<LoginRoleContext> findApprovedRoleContext(long userId, String role);
+
     boolean loginIdExists(String loginId);
 
     boolean applicationEmailExists(String email);

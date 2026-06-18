@@ -18,6 +18,32 @@ public class JdbcAuthRepository implements AuthRepository {
     }
 
     @Override
+    public Optional<UserCredential> findUserCredential(String loginId) {
+        List<UserCredential> rows = jdbcTemplate.query("""
+                SELECT id, login_id, password_hash, status
+                  FROM users
+                 WHERE lower(login_id) = lower(:loginId)
+                   AND deleted_at IS NULL
+                """, Map.of("loginId", loginId), (rs, rowNum) -> new UserCredential(
+                rs.getLong("id"),
+                rs.getString("login_id"),
+                rs.getString("password_hash"),
+                rs.getString("status")
+        ));
+        return rows.stream().findFirst();
+    }
+
+    @Override
+    public Optional<LoginRoleContext> findApprovedRoleContext(long userId, String role) {
+        return switch (role) {
+            case "LEADER" -> findPartnerRoleContext(userId, role, "COUNTRY_LEADER", "COUNTRY_LEADER_APPROVED");
+            case "PARTNER" -> findPartnerRoleContext(userId, role, "SALES_PARTNER", "SALES_PARTNER_APPROVED");
+            case "MERCHANT" -> findMerchantRoleContext(userId);
+            default -> Optional.empty();
+        };
+    }
+
+    @Override
     public boolean loginIdExists(String loginId) {
         return count("""
                 SELECT COUNT(*)
@@ -273,6 +299,49 @@ public class JdbcAuthRepository implements AuthRepository {
     private long count(String sql, Map<String, ?> params) {
         Long count = jdbcTemplate.queryForObject(sql, params, Long.class);
         return count == null ? 0L : count;
+    }
+
+    private Optional<LoginRoleContext> findPartnerRoleContext(
+            long userId,
+            String role,
+            String partnerType,
+            String status
+    ) {
+        List<LoginRoleContext> rows = jdbcTemplate.query("""
+                SELECT id, COALESCE(assigned_country, country) AS country_scope
+                  FROM partners
+                 WHERE user_id = :userId
+                   AND partner_type = :partnerType
+                   AND status = :status
+                 ORDER BY updated_at DESC, id DESC
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("userId", userId)
+                .addValue("partnerType", partnerType)
+                .addValue("status", status), (rs, rowNum) -> new LoginRoleContext(
+                role,
+                rs.getLong("id"),
+                null,
+                rs.getString("country_scope") == null ? List.of() : List.of(rs.getString("country_scope"))
+        ));
+        return rows.stream().findFirst();
+    }
+
+    private Optional<LoginRoleContext> findMerchantRoleContext(long userId) {
+        List<LoginRoleContext> rows = jdbcTemplate.query("""
+                SELECT id, country
+                  FROM merchants
+                 WHERE owner_user_id = :userId
+                   AND status = 'MERCHANT_APPROVED'
+                 ORDER BY updated_at DESC, id DESC
+                 LIMIT 1
+                """, Map.of("userId", userId), (rs, rowNum) -> new LoginRoleContext(
+                "MERCHANT",
+                null,
+                rs.getLong("id"),
+                rs.getString("country") == null ? List.of() : List.of(rs.getString("country"))
+        ));
+        return rows.stream().findFirst();
     }
 
     private String requestedRole(String applicantType) {
