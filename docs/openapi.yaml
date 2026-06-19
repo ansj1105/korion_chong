@@ -33,6 +33,7 @@ paths:
               - loginId
               - email
               - telegram
+              - phone
               - whatsapp
               - walletAddress
         - name: value
@@ -96,6 +97,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EmailVerificationConfirmResponse'
+  /api/auth/telegram-verifications/send:
+    post:
+      summary: Send distributor signup Telegram verification code
+      description: Stores only a code hash in distributor_signup_telegram_verifications. The raw code must be delivered by the configured Telegram adapter.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelegramVerificationSendRequest'
+      responses:
+        '200':
+          description: Verification code was created for delivery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelegramVerificationSendResponse'
+  /api/auth/telegram-verifications/confirm:
+    post:
+      summary: Confirm distributor signup Telegram verification code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelegramVerificationConfirmRequest'
+      responses:
+        '200':
+          description: Telegram verification result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelegramVerificationConfirmResponse'
   /api/auth/wallet-links/verify:
     post:
       summary: Verify KORION WALLET TRX address ownership for signup
@@ -1296,6 +1330,11 @@ components:
             - LEADER
             - PARTNER
             - MERCHANT
+        twoFactorCode:
+          type: string
+          maxLength: 16
+          nullable: true
+          description: Optional placeholder for future 2FA. Current login policy ignores this field and always returns requiresTwoFactor=false.
         requestId:
           type: string
           maxLength: 128
@@ -1388,6 +1427,11 @@ components:
         - email
         - companyName
         - contactName
+        - telegram
+        - whatsapp
+        - country
+        - region
+        - walletAddress
       properties:
         applicantType:
           type: string
@@ -1418,9 +1462,11 @@ components:
         phone:
           type: string
           maxLength: 80
+          description: Can be checked through /api/auth/availability with field=phone before submission.
         telegram:
           type: string
           maxLength: 120
+          description: Must have a VERIFIED row in distributor_signup_telegram_verifications before submission.
         whatsapp:
           type: string
           maxLength: 80
@@ -1451,6 +1497,7 @@ components:
         evidenceNote:
           type: string
           maxLength: 4000
+          description: Required for MERCHANT applications as the verification document link or note.
         requestId:
           type: string
           maxLength: 128
@@ -1522,6 +1569,55 @@ components:
           type: string
           enum:
             - EMAIL_VERIFIED
+        messageKey:
+          type: string
+    TelegramVerificationSendRequest:
+      type: object
+      required:
+        - telegram
+      properties:
+        telegram:
+          type: string
+          maxLength: 120
+        requestId:
+          type: string
+          maxLength: 128
+    TelegramVerificationSendResponse:
+      type: object
+      properties:
+        resultCode:
+          type: string
+          enum:
+            - TELEGRAM_VERIFICATION_SENT
+        messageKey:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    TelegramVerificationConfirmRequest:
+      type: object
+      required:
+        - telegram
+        - code
+      properties:
+        telegram:
+          type: string
+          maxLength: 120
+        code:
+          type: string
+          pattern: '^\d{6}$'
+        requestId:
+          type: string
+          maxLength: 128
+    TelegramVerificationConfirmResponse:
+      type: object
+      properties:
+        verified:
+          type: boolean
+        resultCode:
+          type: string
+          enum:
+            - TELEGRAM_VERIFIED
         messageKey:
           type: string
     WalletLinkVerifyRequest:

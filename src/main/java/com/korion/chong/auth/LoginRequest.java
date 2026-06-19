@@ -8,6 +8,7 @@ public record LoginRequest(
         @NotBlank @Size(max = 50) String loginId,
         @NotBlank @Size(min = 8, max = 72) String password,
         @NotBlank @Pattern(regexp = "LEADER|PARTNER|MERCHANT") String role,
+        @Size(max = 16) String twoFactorCode,
         @Size(max = 128) String requestId
 ) {
 }

@@ -13,6 +13,8 @@ public interface AuthRepository {
 
     boolean telegramExists(String telegram);
 
+    boolean phoneExists(String phone);
+
     boolean whatsappExists(String whatsapp);
 
     boolean walletAddressExists(String walletAddress);
@@ -24,6 +26,12 @@ public interface AuthRepository {
     boolean confirmEmailVerification(String email, String codeHash, java.time.Instant now);
 
     boolean emailVerified(String email);
+
+    void createTelegramVerification(String telegram, String codeHash, java.time.Instant expiresAt, String requestId);
+
+    boolean confirmTelegramVerification(String telegram, String codeHash, java.time.Instant now);
+
+    boolean telegramVerified(String telegram);
 
     void recordWalletVerification(WalletLinkVerifyRequest request, String signatureHash, String status, String errorCode, String errorMessage);
 

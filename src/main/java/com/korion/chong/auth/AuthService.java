@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
     private static final String TRON_ADDRESS_PATTERN = "^T[1-9A-HJ-NP-Za-km-z]{33}$";
     private static final Duration EMAIL_CODE_TTL = Duration.ofMinutes(10);
+    private static final Duration TELEGRAM_CODE_TTL = Duration.ofMinutes(10);
 
     private final AuthRepository repository;
     private final VerificationCodeGenerator codeGenerator;
@@ -39,6 +40,7 @@ public class AuthService {
             case "loginId" -> repository.loginIdExists(value);
             case "email" -> repository.applicationEmailExists(value);
             case "telegram" -> repository.telegramExists(value);
+            case "phone" -> repository.phoneExists(value);
             case "whatsapp" -> repository.whatsappExists(value);
             case "walletAddress" -> repository.walletAddressExists(value);
             default -> throw new AuthValidationException("UNSUPPORTED_FIELD", "Unsupported availability field: " + field);
@@ -132,6 +134,43 @@ public class AuthService {
     }
 
     @Transactional
+    public TelegramVerificationSendResponse sendTelegramVerification(TelegramVerificationSendRequest request) {
+        if (repository.telegramExists(request.telegram())) {
+            throw new AuthValidationException("DUPLICATE_TELEGRAM", "telegram is already used by an open application");
+        }
+        String code = codeGenerator.generateSixDigitCode();
+        Instant expiresAt = Instant.now(clock).plus(TELEGRAM_CODE_TTL);
+        repository.createTelegramVerification(request.telegram(), HashingSupport.sha256(code), expiresAt, request.requestId());
+        repository.recordActivity("SYSTEM", "SIGNUP_TELEGRAM_VERIFICATION_SENT", "SUCCESS", "distributor_signup_telegram_verifications", null, request.requestId());
+        return new TelegramVerificationSendResponse(
+                "TELEGRAM_VERIFICATION_SENT",
+                "auth.telegramVerification.sent",
+                expiresAt
+        );
+    }
+
+    @Transactional
+    public TelegramVerificationConfirmResponse confirmTelegramVerification(TelegramVerificationConfirmRequest request) {
+        boolean verified = repository.confirmTelegramVerification(
+                request.telegram(),
+                HashingSupport.sha256(request.code()),
+                Instant.now(clock)
+        );
+        repository.recordActivity(
+                "SYSTEM",
+                "SIGNUP_TELEGRAM_VERIFICATION_CONFIRMED",
+                verified ? "SUCCESS" : "FAILED",
+                "distributor_signup_telegram_verifications",
+                null,
+                request.requestId()
+        );
+        if (!verified) {
+            throw new AuthValidationException("INVALID_TELEGRAM_VERIFICATION_CODE", "telegram verification code is invalid or expired");
+        }
+        return new TelegramVerificationConfirmResponse(true, "TELEGRAM_VERIFIED", "auth.telegramVerification.verified");
+    }
+
+    @Transactional
     public WalletLinkVerifyResponse verifyWalletLink(WalletLinkVerifyRequest request) {
         if (!request.walletAddress().matches(TRON_ADDRESS_PATTERN)) {
             throw new AuthValidationException("INVALID_WALLET_ADDRESS", "walletAddress must be a TRON address");
@@ -171,6 +210,7 @@ public class AuthService {
 
     @Transactional
     public SignupApplicationResponse createSignupApplication(SignupApplicationRequest request) {
+        validateRequiredSignupFields(request);
         if (repository.loginIdExists(request.loginId())) {
             throw new AuthValidationException("DUPLICATE_LOGIN_ID", "loginId is already used");
         }
@@ -179,6 +219,9 @@ public class AuthService {
         }
         if (!repository.emailVerified(request.email())) {
             throw new AuthValidationException("EMAIL_NOT_VERIFIED", "email verification is required before signup application");
+        }
+        if (!repository.telegramVerified(request.telegram())) {
+            throw new AuthValidationException("TELEGRAM_NOT_VERIFIED", "telegram verification is required before signup application");
         }
         if (request.walletAddress() != null && !request.walletAddress().isBlank()) {
             if (!request.walletAddress().matches(TRON_ADDRESS_PATTERN)) {
@@ -205,12 +248,31 @@ public class AuthService {
         );
     }
 
+    private void validateRequiredSignupFields(SignupApplicationRequest request) {
+        requireText(request.telegram(), "telegram");
+        requireText(request.whatsapp(), "whatsapp");
+        requireText(request.country(), "country");
+        requireText(request.region(), "region");
+        requireText(request.walletAddress(), "walletAddress");
+        if ("MERCHANT".equals(request.applicantType())) {
+            requireText(request.address(), "address");
+            requireText(request.businessType(), "businessType");
+            requireText(request.evidenceNote(), "evidenceNote");
+        }
+    }
+
+    private void requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new AuthValidationException("REQUIRED_FIELD_MISSING", field + " is required");
+        }
+    }
+
     private String normalizeField(String field) {
         if (field == null) {
             throw new AuthValidationException("FIELD_REQUIRED", "field is required");
         }
         return switch (field) {
-            case "loginId", "email", "telegram", "whatsapp", "walletAddress" -> field;
+            case "loginId", "email", "telegram", "phone", "whatsapp", "walletAddress" -> field;
             default -> throw new AuthValidationException("UNSUPPORTED_FIELD", "Unsupported availability field: " + field);
         };
     }

@@ -30,6 +30,7 @@ class AuthServiceTest {
     @Test
     void signupApplicationCreatesSeparateApplicationWithoutGrantingUserAuthority() {
         repository.emailVerified = true;
+        repository.telegramVerified = true;
         repository.referral = new ReferralCodeValidationResponse(
                 true,
                 "LEADER-KR",
@@ -85,6 +86,7 @@ class AuthServiceTest {
     @Test
     void signupApplicationRejectsInvalidWalletAddress() {
         repository.emailVerified = true;
+        repository.telegramVerified = true;
         SignupApplicationRequest request = new SignupApplicationRequest(
                 "MERCHANT",
                 "merchant01",
@@ -92,18 +94,18 @@ class AuthServiceTest {
                 "merchant@example.com",
                 "Merchant Store",
                 "Merchant Owner",
-                null,
-                null,
-                null,
+                "+821000000000",
+                "@merchant01",
+                "+821000000000",
                 null,
                 "KR",
-                null,
+                "Seoul",
                 "Seoul",
                 "Seoul address",
                 "Retail",
                 "not-tron",
                 null,
-                null,
+                "business registration document",
                 "req-2"
         );
 
@@ -117,6 +119,47 @@ class AuthServiceTest {
         assertThatThrownBy(() -> service.createSignupApplication(validRequest()))
                 .isInstanceOf(AuthValidationException.class)
                 .hasMessageContaining("email verification");
+    }
+
+    @Test
+    void signupApplicationRequiresVerifiedTelegram() {
+        repository.emailVerified = true;
+
+        assertThatThrownBy(() -> service.createSignupApplication(validRequest()))
+                .isInstanceOf(AuthValidationException.class)
+                .hasMessageContaining("telegram verification");
+    }
+
+    @Test
+    void merchantSignupApplicationRequiresEvidenceNote() {
+        repository.emailVerified = true;
+        repository.telegramVerified = true;
+
+        SignupApplicationRequest request = new SignupApplicationRequest(
+                "MERCHANT",
+                "merchant01",
+                "password123",
+                "merchant@example.com",
+                "Merchant Store",
+                "Merchant Owner",
+                "+821000000000",
+                "@merchant01",
+                "+821000000000",
+                null,
+                "KR",
+                "Seoul",
+                "Seoul",
+                "Seoul address",
+                "Retail",
+                "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
+                null,
+                null,
+                "req-merchant"
+        );
+
+        assertThatThrownBy(() -> service.createSignupApplication(request))
+                .isInstanceOf(AuthValidationException.class)
+                .hasMessageContaining("evidenceNote");
     }
 
     @Test
@@ -136,6 +179,28 @@ class AuthServiceTest {
 
         EmailVerificationConfirmResponse response = service.confirmEmailVerification(
                 new EmailVerificationConfirmRequest("partner@example.com", "123456", "req-email")
+        );
+
+        assertThat(response.verified()).isTrue();
+    }
+
+    @Test
+    void sendTelegramVerificationStoresOnlyCodeHash() {
+        TelegramVerificationSendResponse response = service.sendTelegramVerification(
+                new TelegramVerificationSendRequest("@partner01", "req-telegram")
+        );
+
+        assertThat(response.resultCode()).isEqualTo("TELEGRAM_VERIFICATION_SENT");
+        assertThat(repository.telegramCodeHash).isEqualTo(HashingSupport.sha256("123456"));
+        assertThat(repository.telegramCodeHash).doesNotContain("123456");
+    }
+
+    @Test
+    void confirmTelegramVerificationReturnsVerifiedResult() {
+        repository.telegramConfirmResult = true;
+
+        TelegramVerificationConfirmResponse response = service.confirmTelegramVerification(
+                new TelegramVerificationConfirmRequest("@partner01", "123456", "req-telegram")
         );
 
         assertThat(response.verified()).isTrue();
@@ -169,6 +234,7 @@ class AuthServiceTest {
                 "leader01",
                 "password123",
                 "LEADER",
+                null,
                 "req-login"
         ));
 
@@ -191,6 +257,7 @@ class AuthServiceTest {
                 "leader01",
                 "wrong-password",
                 "LEADER",
+                null,
                 "req-login"
         )))
                 .isInstanceOf(AuthValidationException.class)
@@ -206,6 +273,7 @@ class AuthServiceTest {
                 "leader01",
                 "password123",
                 "PARTNER",
+                null,
                 "req-login"
         )))
                 .isInstanceOf(AuthValidationException.class)
@@ -221,16 +289,16 @@ class AuthServiceTest {
                 "partner@example.com",
                 "Partner Co",
                 "Partner Owner",
-                null,
-                null,
-                null,
+                "+821000000000",
+                "@partner01",
+                "+821000000000",
                 null,
                 "KR",
+                "Seoul",
                 null,
                 null,
                 null,
-                null,
-                null,
+                "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
                 null,
                 null,
                 "req-1"
@@ -242,8 +310,11 @@ class AuthServiceTest {
         boolean created;
         boolean createdUser;
         boolean emailVerified;
+        boolean telegramVerified;
         boolean emailConfirmResult;
+        boolean telegramConfirmResult;
         String emailCodeHash;
+        String telegramCodeHash;
         String signatureHash;
         String passwordHash;
         String walletStatus;
@@ -280,6 +351,11 @@ class AuthServiceTest {
         }
 
         @Override
+        public boolean phoneExists(String phone) {
+            return false;
+        }
+
+        @Override
         public boolean whatsappExists(String whatsapp) {
             return false;
         }
@@ -307,6 +383,21 @@ class AuthServiceTest {
         @Override
         public boolean emailVerified(String email) {
             return emailVerified;
+        }
+
+        @Override
+        public void createTelegramVerification(String telegram, String codeHash, Instant expiresAt, String requestId) {
+            telegramCodeHash = codeHash;
+        }
+
+        @Override
+        public boolean confirmTelegramVerification(String telegram, String codeHash, Instant now) {
+            return telegramConfirmResult;
+        }
+
+        @Override
+        public boolean telegramVerified(String telegram) {
+            return telegramVerified;
         }
 
         @Override

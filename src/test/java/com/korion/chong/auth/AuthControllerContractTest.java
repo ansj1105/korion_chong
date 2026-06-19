@@ -101,16 +101,16 @@ class AuthControllerContractTest {
                 "partner@example.com",
                 "Partner Co",
                 "Partner Owner",
-                null,
-                null,
-                null,
+                "+821000000000",
+                "@partner01",
+                "+821000000000",
                 null,
                 "KR",
+                "Seoul",
                 null,
                 null,
                 null,
-                null,
-                null,
+                "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
                 null,
                 null,
                 "req-1"
@@ -167,6 +167,47 @@ class AuthControllerContractTest {
     }
 
     @Test
+    void telegramVerificationSendReturnsContractShape() throws Exception {
+        when(service.sendTelegramVerification(any(TelegramVerificationSendRequest.class)))
+                .thenReturn(new TelegramVerificationSendResponse(
+                        "TELEGRAM_VERIFICATION_SENT",
+                        "auth.telegramVerification.sent",
+                        java.time.Instant.parse("2026-06-18T00:10:00Z")
+                ));
+
+        mockMvc.perform(post("/api/auth/telegram-verifications/send")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new TelegramVerificationSendRequest(
+                                "@partner01",
+                                "req-telegram"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode", equalTo("TELEGRAM_VERIFICATION_SENT")))
+                .andExpect(jsonPath("$.messageKey", equalTo("auth.telegramVerification.sent")));
+    }
+
+    @Test
+    void telegramVerificationConfirmReturnsContractShape() throws Exception {
+        when(service.confirmTelegramVerification(any(TelegramVerificationConfirmRequest.class)))
+                .thenReturn(new TelegramVerificationConfirmResponse(
+                        true,
+                        "TELEGRAM_VERIFIED",
+                        "auth.telegramVerification.verified"
+                ));
+
+        mockMvc.perform(post("/api/auth/telegram-verifications/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new TelegramVerificationConfirmRequest(
+                                "@partner01",
+                                "123456",
+                                "req-telegram"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.verified", equalTo(true)))
+                .andExpect(jsonPath("$.resultCode", equalTo("TELEGRAM_VERIFIED")));
+    }
+
+    @Test
     void walletVerificationReturnsContractShape() throws Exception {
         when(service.verifyWalletLink(any(WalletLinkVerifyRequest.class)))
                 .thenReturn(new WalletLinkVerifyResponse(
@@ -214,6 +255,7 @@ class AuthControllerContractTest {
                                 "leader01",
                                 "password123",
                                 "LEADER",
+                                null,
                                 "req-login"
                         ))))
                 .andExpect(status().isOk())

@@ -166,9 +166,9 @@ public class JdbcLeaderDashboardRepository implements LeaderDashboardRepository 
                    AND sp.partner_type = 'SALES_PARTNER'
                    AND sp.status = 'SALES_PARTNER_APPROVED'
                    AND COALESCE(sp.assigned_country, sp.country) = :countryScope
-                   AND (:status IS NULL OR :status = 'SALES_PARTNER_APPROVED')
-                   AND (:region IS NULL OR sp.region = :region)
-                   AND (:keyword IS NULL OR lower(u.login_id) LIKE :keyword OR lower(sp.city) LIKE :keyword)
+                   AND (CAST(:status AS varchar) IS NULL OR :status = 'SALES_PARTNER_APPROVED')
+                   AND (CAST(:region AS varchar) IS NULL OR sp.region = :region)
+                   AND (CAST(:keyword AS varchar) IS NULL OR lower(u.login_id) LIKE :keyword OR lower(sp.city) LIKE :keyword)
                  GROUP BY sp.id, sp.user_id, u.login_id, COALESCE(sp.assigned_country, sp.country), sp.region, sp.city, sp.status
                  ORDER BY last_activity_at DESC NULLS LAST, sp.id DESC
                  LIMIT :limit OFFSET :offset
@@ -185,9 +185,9 @@ public class JdbcLeaderDashboardRepository implements LeaderDashboardRepository 
                    AND sp.partner_type = 'SALES_PARTNER'
                    AND sp.status = 'SALES_PARTNER_APPROVED'
                    AND COALESCE(sp.assigned_country, sp.country) = :countryScope
-                   AND (:status IS NULL OR :status = 'SALES_PARTNER_APPROVED')
-                   AND (:region IS NULL OR sp.region = :region)
-                   AND (:keyword IS NULL OR lower(u.login_id) LIKE :keyword OR lower(sp.city) LIKE :keyword)
+                   AND (CAST(:status AS varchar) IS NULL OR :status = 'SALES_PARTNER_APPROVED')
+                   AND (CAST(:region AS varchar) IS NULL OR sp.region = :region)
+                   AND (CAST(:keyword AS varchar) IS NULL OR lower(u.login_id) LIKE :keyword OR lower(sp.city) LIKE :keyword)
                 """, partnerParams(leaderId, countryScope, criteria), Long.class);
         return count == null ? 0L : count;
     }
