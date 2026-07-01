@@ -69,6 +69,29 @@ class AuthControllerContractTest {
     }
 
     @Test
+    void partnerReferralCodeValidateReturnsSalesPartnerContractShape() throws Exception {
+        when(service.validateReferralCode(eq("NG-SP-004")))
+                .thenReturn(new ReferralCodeValidationResponse(
+                        true,
+                        "NG-SP-004",
+                        "SALES_PARTNER",
+                        24L,
+                        "NG",
+                        "Lagos",
+                        "VALID_CODE",
+                        "auth.referral.valid"
+                ));
+
+        mockMvc.perform(get("/api/auth/referral-codes/{code}/validate", "NG-SP-004"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valid", equalTo(true)))
+                .andExpect(jsonPath("$.code", equalTo("NG-SP-004")))
+                .andExpect(jsonPath("$.codeType", equalTo("SALES_PARTNER")))
+                .andExpect(jsonPath("$.ownerPartnerId", equalTo(24)))
+                .andExpect(jsonPath("$.resultCode", equalTo("VALID_CODE")));
+    }
+
+    @Test
     void signupOptionsReturnsCountryDropdownItems() throws Exception {
         when(service.signupOptions())
                 .thenReturn(new SignupOptionsResponse(List.of(

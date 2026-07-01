@@ -32,7 +32,6 @@ class AuthServiceTest {
     @Test
     void signupApplicationCreatesSeparateApplicationWithoutGrantingUserAuthority() {
         repository.emailVerified = true;
-        repository.telegramVerified = true;
         repository.referral = new ReferralCodeValidationResponse(
                 true,
                 "NG-LEAD-001",
@@ -78,6 +77,36 @@ class AuthServiceTest {
     }
 
     @Test
+    void signupApplicationRejectsDuplicateTelegramAtSubmit() {
+        repository.emailVerified = true;
+        repository.telegramExists = true;
+
+        assertThatThrownBy(() -> service.createSignupApplication(validRequest()))
+                .isInstanceOf(AuthValidationException.class)
+                .hasMessageContaining("telegram");
+    }
+
+    @Test
+    void signupApplicationRejectsDuplicatePhoneAtSubmit() {
+        repository.emailVerified = true;
+        repository.phoneExists = true;
+
+        assertThatThrownBy(() -> service.createSignupApplication(validRequest()))
+                .isInstanceOf(AuthValidationException.class)
+                .hasMessageContaining("phone");
+    }
+
+    @Test
+    void signupApplicationRejectsDuplicateWhatsappAtSubmit() {
+        repository.emailVerified = true;
+        repository.whatsappExists = true;
+
+        assertThatThrownBy(() -> service.createSignupApplication(validRequest()))
+                .isInstanceOf(AuthValidationException.class)
+                .hasMessageContaining("whatsapp");
+    }
+
+    @Test
     void validateReferralCodeRejectsInvalidFormatWithoutRepositoryLookup() {
         ReferralCodeValidationResponse response = service.validateReferralCode("NG-LEAD-0001");
 
@@ -104,6 +133,27 @@ class AuthServiceTest {
 
         assertThat(response.valid()).isTrue();
         assertThat(repository.lastReferralLookupCode).isEqualTo("NG-LEAD-001");
+    }
+
+    @Test
+    void validateReferralCodeAcceptsPartnerCodeFormatAndLooksUpRepository() {
+        repository.referral = new ReferralCodeValidationResponse(
+                true,
+                "NG-SP-004",
+                "SALES_PARTNER",
+                24L,
+                "NG",
+                "Lagos",
+                "VALID_CODE",
+                "auth.referral.valid"
+        );
+
+        ReferralCodeValidationResponse response = service.validateReferralCode(" ng-sp-004 ");
+
+        assertThat(response.valid()).isTrue();
+        assertThat(response.codeType()).isEqualTo("SALES_PARTNER");
+        assertThat(response.ownerPartnerId()).isEqualTo(24L);
+        assertThat(repository.lastReferralLookupCode).isEqualTo("NG-SP-004");
     }
 
     @Test
@@ -197,18 +247,8 @@ class AuthServiceTest {
     }
 
     @Test
-    void signupApplicationRequiresVerifiedTelegram() {
-        repository.emailVerified = true;
-
-        assertThatThrownBy(() -> service.createSignupApplication(validRequest()))
-                .isInstanceOf(AuthValidationException.class)
-                .hasMessageContaining("telegram verification");
-    }
-
-    @Test
     void merchantSignupApplicationRequiresEvidenceNote() {
         repository.emailVerified = true;
-        repository.telegramVerified = true;
 
         SignupApplicationRequest request = new SignupApplicationRequest(
                 "MERCHANT",
@@ -387,6 +427,9 @@ class AuthServiceTest {
 
     private static class FakeAuthRepository implements AuthRepository {
         boolean loginIdExists;
+        boolean telegramExists;
+        boolean phoneExists;
+        boolean whatsappExists;
         boolean created;
         boolean createdUser;
         boolean emailVerified;
@@ -435,17 +478,17 @@ class AuthServiceTest {
 
         @Override
         public boolean telegramExists(String telegram) {
-            return false;
+            return telegramExists;
         }
 
         @Override
         public boolean phoneExists(String phone) {
-            return false;
+            return phoneExists;
         }
 
         @Override
         public boolean whatsappExists(String whatsapp) {
-            return false;
+            return whatsappExists;
         }
 
         @Override

@@ -263,8 +263,14 @@ public class AuthService {
         if (!repository.emailVerified(request.email())) {
             throw new AuthValidationException("EMAIL_NOT_VERIFIED", "email verification is required before signup application");
         }
-        if (!repository.telegramVerified(request.telegram())) {
-            throw new AuthValidationException("TELEGRAM_NOT_VERIFIED", "telegram verification is required before signup application");
+        if (repository.telegramExists(request.telegram())) {
+            throw new AuthValidationException("DUPLICATE_TELEGRAM", "telegram is already used by an open application");
+        }
+        if (request.phone() != null && !request.phone().isBlank() && repository.phoneExists(request.phone())) {
+            throw new AuthValidationException("DUPLICATE_PHONE", "phone is already used by an open application");
+        }
+        if (repository.whatsappExists(request.whatsapp())) {
+            throw new AuthValidationException("DUPLICATE_WHATSAPP", "whatsapp is already used by an open application");
         }
         if (request.walletAddress() != null && !request.walletAddress().isBlank()) {
             WalletAddressSupport.detectNetwork(request.walletAddress())

@@ -60,6 +60,13 @@ paths:
             type: string
             pattern: '^[A-Z]{2}-(LEAD|SP)-[0-9]{3}$'
             example: NG-LEAD-001
+          examples:
+            leader:
+              summary: Leader referral code
+              value: NG-LEAD-001
+            partner:
+              summary: Partner referral code
+              value: NG-SP-004
       responses:
         '200':
           description: Referral code validation result.
@@ -1534,10 +1541,11 @@ components:
         telegram:
           type: string
           maxLength: 120
-          description: Must have a VERIFIED row in distributor_signup_telegram_verifications before submission.
+          description: Can be checked through /api/auth/availability with field=telegram before submission.
         whatsapp:
           type: string
           maxLength: 80
+          description: Can be checked through /api/auth/availability with field=phone or field=whatsapp before submission.
         referralCode:
           type: string
           maxLength: 64
