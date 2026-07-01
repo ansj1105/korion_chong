@@ -51,12 +51,15 @@ paths:
   /api/auth/referral-codes/{code}/validate:
     get:
       summary: Validate a leader or partner referral code
+      description: Validates canonical referral codes stored in referral_codes. Codes must follow `<countryCode>-LEAD-<number>` or `<countryCode>-SP-<number>`, for example `NG-LEAD-001`.
       parameters:
         - name: code
           in: path
           required: true
           schema:
             type: string
+            pattern: '^[A-Z]{2}-(LEAD|SP)-[0-9]{3}$'
+            example: NG-LEAD-001
       responses:
         '200':
           description: Referral code validation result.
@@ -64,10 +67,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReferralCodeValidationResponse'
+  /api/auth/signup-options:
+    get:
+      summary: Signup dropdown options
+      description: Returns active dropdown options used by the partner and merchant signup form. Country options are sourced from country_codes.
+      responses:
+        '200':
+          description: Signup dropdown options.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupOptionsResponse'
   /api/auth/email-verifications/send:
     post:
       summary: Send distributor signup email verification code
-      description: Stores only a code hash in distributor_signup_email_verifications. The raw code must be delivered by the configured mail adapter.
+      description: Stores only a code hash in distributor_signup_email_verifications and delivers the raw code through the configured SMTP adapter. The code expires 300 seconds after issuance.
       requestBody:
         required: true
         content:
@@ -147,6 +161,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WalletLinkVerifyResponse'
+  /api/auth/wallet-addresses/validate:
+    post:
+      summary: Validate supported KORION WALLET address for signup
+      description: Validates address format and duplicate usage for TRX/TRON, BTC, and ERC/EVM compatible addresses without requiring a wallet signature.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WalletAddressValidateRequest'
+      responses:
+        '200':
+          description: Wallet address validation result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletAddressValidateResponse'
   /api/auth/signup-applications:
     post:
       summary: Submit public partner or merchant signup application
@@ -1405,8 +1436,12 @@ components:
           type: boolean
         code:
           type: string
+          example: NG-LEAD-001
         codeType:
           type: string
+          enum:
+            - COUNTRY_LEADER
+            - SALES_PARTNER
         ownerPartnerId:
           type: integer
           format: int64
@@ -1416,8 +1451,41 @@ components:
           type: string
         resultCode:
           type: string
+          enum:
+            - VALID_CODE
+            - INVALID_CODE
+            - INVALID_CODE_FORMAT
         messageKey:
           type: string
+    SignupOptionsResponse:
+      type: object
+      required:
+        - countries
+      properties:
+        countries:
+          type: array
+          items:
+            $ref: '#/components/schemas/SignupCountryOption'
+    SignupCountryOption:
+      type: object
+      required:
+        - code
+        - nameEn
+      properties:
+        code:
+          type: string
+          example: NG
+        nameEn:
+          type: string
+          example: Nigeria
+        nameKo:
+          type: string
+          nullable: true
+          example: 나이지리아
+        flag:
+          type: string
+          nullable: true
+          example: 🇳🇬
     SignupApplicationRequest:
       type: object
       required:
@@ -1490,10 +1558,12 @@ components:
           maxLength: 80
         walletAddress:
           type: string
-          description: TRON address. Stored only in partner_applications until approval.
+          description: Supported KORION WALLET address (TRX/TRON, BTC, or ERC/EVM). Stored only in partner_applications until approval.
         integrationPlan:
           type: string
           maxLength: 4000
+          nullable: true
+          description: Nullable for referral-code signup paths. Required by the frontend when the applicant selects the HQ direct contract path.
         evidenceNote:
           type: string
           maxLength: 4000
@@ -1544,6 +1614,7 @@ components:
         expiresAt:
           type: string
           format: date-time
+          description: Verification code expiry time. The current TTL is 300 seconds.
     EmailVerificationConfirmRequest:
       type: object
       required:
@@ -1663,6 +1734,49 @@ components:
           type: string
           enum:
             - WALLET_VERIFIED
+        messageKey:
+          type: string
+    WalletAddressValidateRequest:
+      type: object
+      required:
+        - applicantType
+        - walletAddress
+      properties:
+        applicantType:
+          type: string
+          enum:
+            - PARTNER
+            - MERCHANT
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        walletAddress:
+          type: string
+          maxLength: 255
+          description: Supported KORION WALLET network address (TRX/TRON, BTC, or ERC/EVM).
+        requestId:
+          type: string
+          maxLength: 128
+    WalletAddressValidateResponse:
+      type: object
+      properties:
+        verified:
+          type: boolean
+        walletNetwork:
+          type: string
+          enum:
+            - TRON
+            - BTC
+            - EVM
+        authStatus:
+          type: string
+          enum:
+            - VERIFIED
+        resultCode:
+          type: string
+          enum:
+            - WALLET_ADDRESS_VERIFIED
         messageKey:
           type: string
     ApiErrorResponse:

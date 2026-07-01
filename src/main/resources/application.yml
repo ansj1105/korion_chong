@@ -22,3 +22,13 @@ springdoc:
     path: /api-docs
   swagger-ui:
     path: /swagger-ui.html
+
+korion:
+  chong:
+    smtp:
+      host: ${KORION_CHONG_SMTP_HOST:${SMTP_HOST:${MAIL_HOST:}}}
+      port: ${KORION_CHONG_SMTP_PORT:${SMTP_PORT:${MAIL_PORT:587}}}
+      username: ${KORION_CHONG_SMTP_USERNAME:${SMTP_USERNAME:${SMTP_USER:${MAIL_USERNAME:}}}}
+      password: ${KORION_CHONG_SMTP_PASSWORD:${SMTP_PASSWORD:${SMTP_PASS:${MAIL_PASSWORD:}}}}
+      from: ${KORION_CHONG_SMTP_FROM:${SMTP_FROM:${MAIL_FROM:${EMAIL_FROM:no-reply@korion.network}}}}
+      start-tls: ${KORION_CHONG_SMTP_START_TLS:${SMTP_STARTTLS:${MAIL_STARTTLS:true}}}

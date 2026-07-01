@@ -30,6 +30,11 @@ public class AuthController {
         return service.validateReferralCode(code);
     }
 
+    @GetMapping("/signup-options")
+    public SignupOptionsResponse signupOptions() {
+        return service.signupOptions();
+    }
+
     @PostMapping("/email-verifications/send")
     public EmailVerificationSendResponse sendEmailVerification(@Valid @RequestBody EmailVerificationSendRequest request) {
         return service.sendEmailVerification(request);
@@ -53,6 +58,11 @@ public class AuthController {
     @PostMapping("/wallet-links/verify")
     public WalletLinkVerifyResponse verifyWalletLink(@Valid @RequestBody WalletLinkVerifyRequest request) {
         return service.verifyWalletLink(request);
+    }
+
+    @PostMapping("/wallet-addresses/validate")
+    public WalletAddressValidateResponse validateWalletAddress(@Valid @RequestBody WalletAddressValidateRequest request) {
+        return service.validateWalletAddress(request);
     }
 
     @PostMapping("/signup-applications")

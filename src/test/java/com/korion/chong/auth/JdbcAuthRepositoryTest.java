@@ -18,6 +18,26 @@ class JdbcAuthRepositoryTest {
     private final JdbcAuthRepository repository = new JdbcAuthRepository(jdbcTemplate);
 
     @Test
+    void findActiveSignupCountriesReadsCountryCodeMaster() throws Exception {
+        Mockito.when(jdbcTemplate.query(Mockito.contains("FROM country_codes"), any(RowMapper.class)))
+                .thenAnswer(invocation -> {
+                    RowMapper<SignupCountryOption> mapper = invocation.getArgument(1);
+                    ResultSet rs = Mockito.mock(ResultSet.class);
+                    Mockito.when(rs.getString("code")).thenReturn("NG");
+                    Mockito.when(rs.getString("name_en")).thenReturn("Nigeria");
+                    Mockito.when(rs.getString("name_ko")).thenReturn("나이지리아");
+                    Mockito.when(rs.getString("flag")).thenReturn("🇳🇬");
+                    return List.of(mapper.mapRow(rs, 0));
+                });
+
+        List<SignupCountryOption> options = repository.findActiveSignupCountries();
+
+        assertThat(options).hasSize(1);
+        assertThat(options.getFirst().code()).isEqualTo("NG");
+        assertThat(options.getFirst().nameEn()).isEqualTo("Nigeria");
+    }
+
+    @Test
     void merchantSignupStoresOwnerSalesPartnerFromReferralCode() throws Exception {
         Mockito.when(jdbcTemplate.query(Mockito.contains("FROM referral_codes"), any(java.util.Map.class), any(RowMapper.class)))
                 .thenAnswer(invocation -> {

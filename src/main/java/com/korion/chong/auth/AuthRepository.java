@@ -1,5 +1,6 @@
 package com.korion.chong.auth;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface AuthRepository {
@@ -20,6 +21,8 @@ public interface AuthRepository {
     boolean walletAddressExists(String walletAddress);
 
     Optional<ReferralCodeValidationResponse> findReferralCode(String code);
+
+    List<SignupCountryOption> findActiveSignupCountries();
 
     void createEmailVerification(String email, String codeHash, java.time.Instant expiresAt, String requestId);
 

@@ -184,14 +184,22 @@ public class JdbcSignupApprovalRepository implements SignupApprovalRepository {
         if (application.walletAddress() == null || application.walletAddress().isBlank()) {
             return null;
         }
+        String walletNetwork = application.walletNetwork() == null || application.walletNetwork().isBlank()
+                ? "TRON"
+                : application.walletNetwork();
+        String currencyCode = switch (walletNetwork) {
+            case "BTC" -> "BTC";
+            case "EVM" -> "ETH";
+            default -> "TRX";
+        };
         Long id = jdbcTemplate.queryForObject("""
                 INSERT INTO distributor_wallet_addresses (
                     owner_type, owner_user_id, partner_id, merchant_id, network,
                     currency_code, address, auth_status, verified_at, created_at, updated_at
                 )
                 VALUES (
-                    :ownerType, :ownerUserId, :partnerId, :merchantId, 'TRON',
-                    'TRX', :address, :authStatus, :verifiedAt, :now, :now
+                    :ownerType, :ownerUserId, :partnerId, :merchantId, :network,
+                    :currencyCode, :address, :authStatus, :verifiedAt, :now, :now
                 )
                 RETURNING id
                 """, new MapSqlParameterSource()
@@ -199,6 +207,8 @@ public class JdbcSignupApprovalRepository implements SignupApprovalRepository {
                 .addValue("ownerUserId", userId)
                 .addValue("partnerId", partnerId)
                 .addValue("merchantId", merchantId)
+                .addValue("network", walletNetwork)
+                .addValue("currencyCode", currencyCode)
                 .addValue("address", application.walletAddress())
                 .addValue("authStatus", "VERIFIED".equals(application.walletAuthStatus()) ? "VERIFIED" : "UNVERIFIED")
                 .addValue("verifiedAt", "VERIFIED".equals(application.walletAuthStatus()) ? Timestamp.from(now) : null)

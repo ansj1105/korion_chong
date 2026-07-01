@@ -3,19 +3,23 @@ package com.korion.chong.auth;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthService {
-    private static final String TRON_ADDRESS_PATTERN = "^T[1-9A-HJ-NP-Za-km-z]{33}$";
-    private static final Duration EMAIL_CODE_TTL = Duration.ofMinutes(10);
+    private static final Pattern REFERRAL_CODE_PATTERN = Pattern.compile("^[A-Z]{2}-(LEAD|SP)-[0-9]{3}$");
+    private static final Duration EMAIL_CODE_TTL = Duration.ofSeconds(300);
     private static final Duration TELEGRAM_CODE_TTL = Duration.ofMinutes(10);
 
     private final AuthRepository repository;
     private final VerificationCodeGenerator codeGenerator;
+    private final EmailVerificationDeliveryService emailVerificationDeliveryService;
     private final WalletSignatureVerifier walletSignatureVerifier;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
@@ -23,12 +27,14 @@ public class AuthService {
     public AuthService(
             AuthRepository repository,
             VerificationCodeGenerator codeGenerator,
+            EmailVerificationDeliveryService emailVerificationDeliveryService,
             WalletSignatureVerifier walletSignatureVerifier,
             PasswordEncoder passwordEncoder,
             Clock clock
     ) {
         this.repository = repository;
         this.codeGenerator = codeGenerator;
+        this.emailVerificationDeliveryService = emailVerificationDeliveryService;
         this.walletSignatureVerifier = walletSignatureVerifier;
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
@@ -49,8 +55,17 @@ public class AuthService {
     }
 
     public ReferralCodeValidationResponse validateReferralCode(String code) {
-        return repository.findReferralCode(code)
-                .orElseGet(() -> ReferralCodeValidationResponse.invalid(code));
+        String normalizedCode = normalizeReferralCode(code);
+        if (!REFERRAL_CODE_PATTERN.matcher(normalizedCode).matches()) {
+            return ReferralCodeValidationResponse.invalidFormat(normalizedCode);
+        }
+        return repository.findReferralCode(normalizedCode)
+                .orElseGet(() -> ReferralCodeValidationResponse.invalid(normalizedCode));
+    }
+
+    public SignupOptionsResponse signupOptions() {
+        List<SignupCountryOption> countries = repository.findActiveSignupCountries();
+        return new SignupOptionsResponse(countries);
     }
 
     @Transactional
@@ -104,6 +119,7 @@ public class AuthService {
         String code = codeGenerator.generateSixDigitCode();
         Instant expiresAt = Instant.now(clock).plus(EMAIL_CODE_TTL);
         repository.createEmailVerification(request.email(), HashingSupport.sha256(code), expiresAt, request.requestId());
+        emailVerificationDeliveryService.sendVerificationCode(request.email(), code, expiresAt);
         repository.recordActivity("SYSTEM", "SIGNUP_EMAIL_VERIFICATION_SENT", "SUCCESS", "distributor_signup_email_verifications", null, request.requestId());
         return new EmailVerificationSendResponse(
                 "EMAIL_VERIFICATION_SENT",
@@ -172,7 +188,7 @@ public class AuthService {
 
     @Transactional
     public WalletLinkVerifyResponse verifyWalletLink(WalletLinkVerifyRequest request) {
-        if (!request.walletAddress().matches(TRON_ADDRESS_PATTERN)) {
+        if (!WalletAddressSupport.isTronAddress(request.walletAddress())) {
             throw new AuthValidationException("INVALID_WALLET_ADDRESS", "walletAddress must be a TRON address");
         }
         if (repository.walletAddressExists(request.walletAddress())) {
@@ -209,6 +225,33 @@ public class AuthService {
     }
 
     @Transactional
+    public WalletAddressValidateResponse validateWalletAddress(WalletAddressValidateRequest request) {
+        String walletNetwork = WalletAddressSupport.detectNetwork(request.walletAddress())
+                .orElseThrow(() -> new AuthValidationException(
+                        "INVALID_WALLET_ADDRESS",
+                        "walletAddress must be a supported KORION wallet address"
+                ));
+        if (repository.walletAddressExists(request.walletAddress())) {
+            throw new AuthValidationException("DUPLICATE_WALLET_ADDRESS", "walletAddress is already verified or registered");
+        }
+        repository.recordActivity(
+                "SYSTEM",
+                "SIGNUP_WALLET_ADDRESS_VALIDATED",
+                "SUCCESS",
+                "distributor_signup_wallet_verifications",
+                null,
+                request.requestId()
+        );
+        return new WalletAddressValidateResponse(
+                true,
+                walletNetwork,
+                "VERIFIED",
+                "WALLET_ADDRESS_VERIFIED",
+                "auth.wallet.addressVerified"
+        );
+    }
+
+    @Transactional
     public SignupApplicationResponse createSignupApplication(SignupApplicationRequest request) {
         validateRequiredSignupFields(request);
         if (repository.loginIdExists(request.loginId())) {
@@ -224,27 +267,61 @@ public class AuthService {
             throw new AuthValidationException("TELEGRAM_NOT_VERIFIED", "telegram verification is required before signup application");
         }
         if (request.walletAddress() != null && !request.walletAddress().isBlank()) {
-            if (!request.walletAddress().matches(TRON_ADDRESS_PATTERN)) {
-                throw new AuthValidationException("INVALID_WALLET_ADDRESS", "walletAddress must be a TRON address");
-            }
+            WalletAddressSupport.detectNetwork(request.walletAddress())
+                    .orElseThrow(() -> new AuthValidationException(
+                            "INVALID_WALLET_ADDRESS",
+                            "walletAddress must be a supported KORION wallet address"
+                    ));
             if (repository.walletAddressExists(request.walletAddress())) {
                 throw new AuthValidationException("DUPLICATE_WALLET_ADDRESS", "walletAddress is already verified or registered");
             }
         }
-        if (request.referralCode() != null && !request.referralCode().isBlank()
-                && !validateReferralCode(request.referralCode()).valid()) {
+        String normalizedReferralCode = normalizeReferralCode(request.referralCode());
+        SignupApplicationRequest normalizedRequest = normalizedReferralCode.isBlank()
+                ? request
+                : withReferralCode(request, normalizedReferralCode);
+        if (!normalizedReferralCode.isBlank()
+                && !validateReferralCode(normalizedReferralCode).valid()) {
             throw new AuthValidationException("INVALID_REFERRAL_CODE", "referralCode is not active");
         }
 
         String passwordHash = passwordEncoder.encode(request.password());
-        long applicationId = repository.createSignupApplication(request, passwordHash);
-        repository.recordActivity("SYSTEM", "SIGNUP_APPLICATION_SUBMITTED", "REVIEWING", "distributor_signup_applications", applicationId, request.requestId());
+        long applicationId = repository.createSignupApplication(normalizedRequest, passwordHash);
+        repository.recordActivity("SYSTEM", "SIGNUP_APPLICATION_SUBMITTED", "REVIEWING", "distributor_signup_applications", applicationId, normalizedRequest.requestId());
         return new SignupApplicationResponse(
                 applicationId,
                 "REQUESTED",
                 "SIGNUP_APPLICATION_SUBMITTED",
                 "auth.signup.submitted",
-                request.walletAddress() != null && !request.walletAddress().isBlank()
+                normalizedRequest.walletAddress() != null && !normalizedRequest.walletAddress().isBlank()
+        );
+    }
+
+    private String normalizeReferralCode(String code) {
+        return code == null ? "" : code.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private SignupApplicationRequest withReferralCode(SignupApplicationRequest request, String referralCode) {
+        return new SignupApplicationRequest(
+                request.applicantType(),
+                request.loginId(),
+                request.password(),
+                request.email(),
+                request.companyName(),
+                request.contactName(),
+                request.phone(),
+                request.telegram(),
+                request.whatsapp(),
+                referralCode,
+                request.country(),
+                request.region(),
+                request.city(),
+                request.address(),
+                request.businessType(),
+                request.walletAddress(),
+                request.integrationPlan(),
+                request.evidenceNote(),
+                request.requestId()
         );
     }
 

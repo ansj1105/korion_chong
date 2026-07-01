@@ -13,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 class AuthServiceTest {
     private final FakeAuthRepository repository = new FakeAuthRepository();
+    private final FakeEmailVerificationDeliveryService emailDeliveryService = new FakeEmailVerificationDeliveryService();
     private final FakeWalletSignatureVerifier walletSignatureVerifier = new FakeWalletSignatureVerifier();
     private final AuthService service = new AuthService(
             repository,
@@ -22,6 +23,7 @@ class AuthServiceTest {
                     return "123456";
                 }
             },
+            emailDeliveryService,
             walletSignatureVerifier,
             new FakePasswordEncoder(),
             Clock.fixed(Instant.parse("2026-06-18T00:00:00Z"), ZoneOffset.UTC)
@@ -33,11 +35,11 @@ class AuthServiceTest {
         repository.telegramVerified = true;
         repository.referral = new ReferralCodeValidationResponse(
                 true,
-                "LEADER-KR",
+                "NG-LEAD-001",
                 "COUNTRY_LEADER",
                 10L,
-                "KR",
-                "Seoul",
+                "NG",
+                "Lagos",
                 "VALID_CODE",
                 "auth.referral.valid"
         );
@@ -52,7 +54,7 @@ class AuthServiceTest {
                 "010-0000-0000",
                 "@partner01",
                 "+821000000000",
-                "LEADER-KR",
+                "ng-lead-001",
                 "KR",
                 "Seoul",
                 "Seoul",
@@ -71,7 +73,46 @@ class AuthServiceTest {
         assertThat(repository.createdUser).isFalse();
         assertThat(repository.passwordHash).isEqualTo("hashed-password123");
         assertThat(repository.passwordHash).doesNotContain("Partner Co");
+        assertThat(repository.submittedReferralCode).isEqualTo("NG-LEAD-001");
         assertThat(repository.activityTargetType).isEqualTo("distributor_signup_applications");
+    }
+
+    @Test
+    void validateReferralCodeRejectsInvalidFormatWithoutRepositoryLookup() {
+        ReferralCodeValidationResponse response = service.validateReferralCode("NG-LEAD-0001");
+
+        assertThat(response.valid()).isFalse();
+        assertThat(response.code()).isEqualTo("NG-LEAD-0001");
+        assertThat(response.resultCode()).isEqualTo("INVALID_CODE_FORMAT");
+        assertThat(repository.referralLookupCount).isZero();
+    }
+
+    @Test
+    void validateReferralCodeNormalizesBeforeRepositoryLookup() {
+        repository.referral = new ReferralCodeValidationResponse(
+                true,
+                "NG-LEAD-001",
+                "COUNTRY_LEADER",
+                10L,
+                "NG",
+                "Lagos",
+                "VALID_CODE",
+                "auth.referral.valid"
+        );
+
+        ReferralCodeValidationResponse response = service.validateReferralCode(" ng-lead-001 ");
+
+        assertThat(response.valid()).isTrue();
+        assertThat(repository.lastReferralLookupCode).isEqualTo("NG-LEAD-001");
+    }
+
+    @Test
+    void signupOptionsReturnsActiveCountryOptions() {
+        SignupOptionsResponse response = service.signupOptions();
+
+        assertThat(response.countries())
+                .extracting(SignupCountryOption::code)
+                .containsExactly("NG", "KR");
     }
 
     @Test
@@ -110,6 +151,40 @@ class AuthServiceTest {
         );
 
         assertThatThrownBy(() -> service.createSignupApplication(request))
+                .isInstanceOf(AuthValidationException.class)
+                .hasMessageContaining("walletAddress");
+    }
+
+    @Test
+    void walletAddressValidationAcceptsSupportedNetworks() {
+        WalletAddressValidateResponse evmResponse = service.validateWalletAddress(new WalletAddressValidateRequest(
+                "PARTNER",
+                "partner@example.com",
+                "0x52908400098527886E0F7030069857D2E4169EE7",
+                "req-wallet-address"
+        ));
+        WalletAddressValidateResponse btcResponse = service.validateWalletAddress(new WalletAddressValidateRequest(
+                "PARTNER",
+                "partner@example.com",
+                "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080",
+                "req-wallet-address-btc"
+        ));
+
+        assertThat(evmResponse.verified()).isTrue();
+        assertThat(evmResponse.walletNetwork()).isEqualTo("EVM");
+        assertThat(evmResponse.resultCode()).isEqualTo("WALLET_ADDRESS_VERIFIED");
+        assertThat(btcResponse.verified()).isTrue();
+        assertThat(btcResponse.walletNetwork()).isEqualTo("BTC");
+    }
+
+    @Test
+    void walletAddressValidationRejectsUnsupportedAddress() {
+        assertThatThrownBy(() -> service.validateWalletAddress(new WalletAddressValidateRequest(
+                "PARTNER",
+                "partner@example.com",
+                "not-a-wallet",
+                "req-wallet-address"
+        )))
                 .isInstanceOf(AuthValidationException.class)
                 .hasMessageContaining("walletAddress");
     }
@@ -169,8 +244,13 @@ class AuthServiceTest {
         );
 
         assertThat(response.resultCode()).isEqualTo("EMAIL_VERIFICATION_SENT");
+        assertThat(response.expiresAt()).isEqualTo(Instant.parse("2026-06-18T00:05:00Z"));
         assertThat(repository.emailCodeHash).isEqualTo(HashingSupport.sha256("123456"));
         assertThat(repository.emailCodeHash).doesNotContain("123456");
+        assertThat(repository.emailExpiresAt).isEqualTo(Instant.parse("2026-06-18T00:05:00Z"));
+        assertThat(emailDeliveryService.email).isEqualTo("partner@example.com");
+        assertThat(emailDeliveryService.code).isEqualTo("123456");
+        assertThat(emailDeliveryService.expiresAt).isEqualTo(Instant.parse("2026-06-18T00:05:00Z"));
     }
 
     @Test
@@ -315,12 +395,20 @@ class AuthServiceTest {
         boolean telegramConfirmResult;
         String emailCodeHash;
         String telegramCodeHash;
+        Instant emailExpiresAt;
         String signatureHash;
         String passwordHash;
         String walletStatus;
         String activityTargetType;
         String activityStatus;
+        String submittedReferralCode;
+        String lastReferralLookupCode;
+        int referralLookupCount;
         ReferralCodeValidationResponse referral;
+        List<SignupCountryOption> countryOptions = List.of(
+                new SignupCountryOption("NG", "Nigeria", "나이지리아", "🇳🇬"),
+                new SignupCountryOption("KR", "Korea (South)", "대한민국", "🇰🇷")
+        );
         UserCredential credential;
         LoginRoleContext roleContext;
 
@@ -367,12 +455,20 @@ class AuthServiceTest {
 
         @Override
         public Optional<ReferralCodeValidationResponse> findReferralCode(String code) {
+            referralLookupCount += 1;
+            lastReferralLookupCode = code;
             return Optional.ofNullable(referral);
+        }
+
+        @Override
+        public List<SignupCountryOption> findActiveSignupCountries() {
+            return countryOptions;
         }
 
         @Override
         public void createEmailVerification(String email, String codeHash, Instant expiresAt, String requestId) {
             emailCodeHash = codeHash;
+            emailExpiresAt = expiresAt;
         }
 
         @Override
@@ -409,6 +505,7 @@ class AuthServiceTest {
         @Override
         public long createSignupApplication(SignupApplicationRequest request, String passwordHash) {
             created = true;
+            submittedReferralCode = request.referralCode();
             this.passwordHash = passwordHash;
             return 123L;
         }
@@ -426,6 +523,19 @@ class AuthServiceTest {
         @Override
         public boolean verifyTronSignature(String address, String nonce, String signature) {
             return result;
+        }
+    }
+
+    private static class FakeEmailVerificationDeliveryService implements EmailVerificationDeliveryService {
+        String email;
+        String code;
+        Instant expiresAt;
+
+        @Override
+        public void sendVerificationCode(String email, String code, Instant expiresAt) {
+            this.email = email;
+            this.code = code;
+            this.expiresAt = expiresAt;
         }
     }
 

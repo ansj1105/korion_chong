@@ -47,25 +47,41 @@ class AuthControllerContractTest {
 
     @Test
     void referralCodeValidateReturnsContractShape() throws Exception {
-        when(service.validateReferralCode(eq("LEADER-KR")))
+        when(service.validateReferralCode(eq("NG-LEAD-001")))
                 .thenReturn(new ReferralCodeValidationResponse(
                         true,
-                        "LEADER-KR",
+                        "NG-LEAD-001",
                         "COUNTRY_LEADER",
                         10L,
-                        "KR",
-                        "Seoul",
+                        "NG",
+                        "Lagos",
                         "VALID_CODE",
                         "auth.referral.valid"
                 ));
 
-        mockMvc.perform(get("/api/auth/referral-codes/{code}/validate", "LEADER-KR"))
+        mockMvc.perform(get("/api/auth/referral-codes/{code}/validate", "NG-LEAD-001"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.valid", equalTo(true)))
-                .andExpect(jsonPath("$.code", equalTo("LEADER-KR")))
+                .andExpect(jsonPath("$.code", equalTo("NG-LEAD-001")))
                 .andExpect(jsonPath("$.codeType", equalTo("COUNTRY_LEADER")))
                 .andExpect(jsonPath("$.ownerPartnerId", equalTo(10)))
                 .andExpect(jsonPath("$.resultCode", equalTo("VALID_CODE")));
+    }
+
+    @Test
+    void signupOptionsReturnsCountryDropdownItems() throws Exception {
+        when(service.signupOptions())
+                .thenReturn(new SignupOptionsResponse(List.of(
+                        new SignupCountryOption("NG", "Nigeria", "나이지리아", "🇳🇬"),
+                        new SignupCountryOption("KR", "Korea (South)", "대한민국", "🇰🇷")
+                )));
+
+        mockMvc.perform(get("/api/auth/signup-options"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.countries[0].code", equalTo("NG")))
+                .andExpect(jsonPath("$.countries[0].nameEn", equalTo("Nigeria")))
+                .andExpect(jsonPath("$.countries[0].nameKo", equalTo("나이지리아")))
+                .andExpect(jsonPath("$.countries[0].flag", equalTo("🇳🇬")));
     }
 
     @Test
@@ -131,7 +147,7 @@ class AuthControllerContractTest {
                 .thenReturn(new EmailVerificationSendResponse(
                         "EMAIL_VERIFICATION_SENT",
                         "auth.emailVerification.sent",
-                        java.time.Instant.parse("2026-06-18T00:10:00Z")
+                        java.time.Instant.parse("2026-06-18T00:05:00Z")
                 ));
 
         mockMvc.perform(post("/api/auth/email-verifications/send")
@@ -230,6 +246,32 @@ class AuthControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.verified", equalTo(true)))
                 .andExpect(jsonPath("$.authStatus", equalTo("VERIFIED")));
+    }
+
+    @Test
+    void walletAddressValidationReturnsContractShape() throws Exception {
+        when(service.validateWalletAddress(any(WalletAddressValidateRequest.class)))
+                .thenReturn(new WalletAddressValidateResponse(
+                        true,
+                        "EVM",
+                        "VERIFIED",
+                        "WALLET_ADDRESS_VERIFIED",
+                        "auth.wallet.addressVerified"
+                ));
+
+        mockMvc.perform(post("/api/auth/wallet-addresses/validate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new WalletAddressValidateRequest(
+                                "PARTNER",
+                                "partner@example.com",
+                                "0x52908400098527886E0F7030069857D2E4169EE7",
+                                "req-wallet-address"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.verified", equalTo(true)))
+                .andExpect(jsonPath("$.walletNetwork", equalTo("EVM")))
+                .andExpect(jsonPath("$.authStatus", equalTo("VERIFIED")))
+                .andExpect(jsonPath("$.resultCode", equalTo("WALLET_ADDRESS_VERIFIED")));
     }
 
     @Test

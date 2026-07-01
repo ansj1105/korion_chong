@@ -104,16 +104,14 @@ public class JdbcAuthRepository implements AuthRepository {
         return count("""
                 SELECT COUNT(*)
                   FROM distributor_wallet_addresses
-                 WHERE network = 'TRON'
-                   AND lower(address) = lower(:walletAddress)
+                 WHERE lower(address) = lower(:walletAddress)
                    AND auth_status IN ('UNVERIFIED', 'VERIFIED')
                    AND revoked_at IS NULL
                 """, params) > 0
                 || count("""
                 SELECT COUNT(*)
                   FROM distributor_signup_applications
-                 WHERE wallet_network = 'TRON'
-                   AND lower(wallet_address) = lower(:walletAddress)
+                 WHERE lower(wallet_address) = lower(:walletAddress)
                    AND status IN ('REQUESTED', 'REVIEWING', 'NEED_MORE_INFO', 'HOLD', 'APPROVED')
                 """, params) > 0;
     }
@@ -123,7 +121,7 @@ public class JdbcAuthRepository implements AuthRepository {
         List<ReferralCodeValidationResponse> rows = jdbcTemplate.query("""
                 SELECT id, code, code_type, owner_partner_id, country, city
                   FROM referral_codes
-                 WHERE code = :code
+                 WHERE upper(code) = upper(:code)
                    AND is_active = TRUE
                    AND (max_usage IS NULL OR usage_count < max_usage)
                 """, Map.of("code", code), (rs, rowNum) -> new ReferralCodeValidationResponse(
@@ -137,6 +135,23 @@ public class JdbcAuthRepository implements AuthRepository {
                 "auth.referral.valid"
         ));
         return rows.stream().findFirst();
+    }
+
+    @Override
+    public List<SignupCountryOption> findActiveSignupCountries() {
+        return jdbcTemplate.query("""
+                SELECT code, name_en, name_ko, flag
+                  FROM country_codes
+                 WHERE is_active = TRUE
+                   AND iso2_code IS NOT NULL
+                   AND char_length(code) = 2
+                 ORDER BY sort_order ASC, code ASC
+                """, (rs, rowNum) -> new SignupCountryOption(
+                rs.getString("code"),
+                rs.getString("name_en"),
+                rs.getString("name_ko"),
+                rs.getString("flag")
+        ));
     }
 
     @Override
@@ -318,7 +333,7 @@ public class JdbcAuthRepository implements AuthRepository {
                 .addValue("city", request.city())
                 .addValue("address", request.address())
                 .addValue("businessType", request.businessType())
-                .addValue("walletNetwork", request.walletAddress() == null || request.walletAddress().isBlank() ? null : "TRON")
+                .addValue("walletNetwork", WalletAddressSupport.detectNetwork(request.walletAddress()).orElse(null))
                 .addValue("walletAddress", request.walletAddress())
                 .addValue("integrationPlan", request.integrationPlan())
                 .addValue("evidenceNote", request.evidenceNote())
@@ -364,7 +379,7 @@ public class JdbcAuthRepository implements AuthRepository {
 
     private Long findReferralCodeId(String code) {
         return jdbcTemplate.queryForObject("""
-                SELECT id FROM referral_codes WHERE code = :code
+                SELECT id FROM referral_codes WHERE upper(code) = upper(:code)
                 """, Map.of("code", code), Long.class);
     }
 
