@@ -30,12 +30,6 @@ public interface AuthRepository {
 
     boolean emailVerified(String email);
 
-    void createTelegramVerification(String telegram, String codeHash, java.time.Instant expiresAt, String requestId);
-
-    boolean confirmTelegramVerification(String telegram, String codeHash, java.time.Instant now);
-
-    boolean telegramVerified(String telegram);
-
     void recordWalletVerification(WalletLinkVerifyRequest request, String signatureHash, String status, String errorCode, String errorMessage);
 
     long createSignupApplication(SignupApplicationRequest request, String passwordHash);

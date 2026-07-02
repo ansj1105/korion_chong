@@ -177,7 +177,6 @@ class AuthServiceTest {
     @Test
     void signupApplicationRejectsInvalidWalletAddress() {
         repository.emailVerified = true;
-        repository.telegramVerified = true;
         SignupApplicationRequest request = new SignupApplicationRequest(
                 "MERCHANT",
                 "merchant01",
@@ -305,28 +304,6 @@ class AuthServiceTest {
     }
 
     @Test
-    void sendTelegramVerificationStoresOnlyCodeHash() {
-        TelegramVerificationSendResponse response = service.sendTelegramVerification(
-                new TelegramVerificationSendRequest("@partner01", "req-telegram")
-        );
-
-        assertThat(response.resultCode()).isEqualTo("TELEGRAM_VERIFICATION_SENT");
-        assertThat(repository.telegramCodeHash).isEqualTo(HashingSupport.sha256("123456"));
-        assertThat(repository.telegramCodeHash).doesNotContain("123456");
-    }
-
-    @Test
-    void confirmTelegramVerificationReturnsVerifiedResult() {
-        repository.telegramConfirmResult = true;
-
-        TelegramVerificationConfirmResponse response = service.confirmTelegramVerification(
-                new TelegramVerificationConfirmRequest("@partner01", "123456", "req-telegram")
-        );
-
-        assertThat(response.verified()).isTrue();
-    }
-
-    @Test
     void walletVerificationStoresSignatureHashOnly() {
         walletSignatureVerifier.result = true;
 
@@ -433,11 +410,8 @@ class AuthServiceTest {
         boolean created;
         boolean createdUser;
         boolean emailVerified;
-        boolean telegramVerified;
         boolean emailConfirmResult;
-        boolean telegramConfirmResult;
         String emailCodeHash;
-        String telegramCodeHash;
         Instant emailExpiresAt;
         String signatureHash;
         String passwordHash;
@@ -522,21 +496,6 @@ class AuthServiceTest {
         @Override
         public boolean emailVerified(String email) {
             return emailVerified;
-        }
-
-        @Override
-        public void createTelegramVerification(String telegram, String codeHash, Instant expiresAt, String requestId) {
-            telegramCodeHash = codeHash;
-        }
-
-        @Override
-        public boolean confirmTelegramVerification(String telegram, String codeHash, Instant now) {
-            return telegramConfirmResult;
-        }
-
-        @Override
-        public boolean telegramVerified(String telegram) {
-            return telegramVerified;
         }
 
         @Override

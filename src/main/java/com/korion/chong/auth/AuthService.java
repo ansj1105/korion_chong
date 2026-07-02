@@ -15,8 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
     private static final Pattern REFERRAL_CODE_PATTERN = Pattern.compile("^[A-Z]{2}-(LEAD|SP)-[0-9]{3}$");
     private static final Duration EMAIL_CODE_TTL = Duration.ofSeconds(300);
-    private static final Duration TELEGRAM_CODE_TTL = Duration.ofMinutes(10);
-
     private final AuthRepository repository;
     private final VerificationCodeGenerator codeGenerator;
     private final EmailVerificationDeliveryService emailVerificationDeliveryService;
@@ -147,43 +145,6 @@ public class AuthService {
             throw new AuthValidationException("INVALID_EMAIL_VERIFICATION_CODE", "email verification code is invalid or expired");
         }
         return new EmailVerificationConfirmResponse(true, "EMAIL_VERIFIED", "auth.emailVerification.verified");
-    }
-
-    @Transactional
-    public TelegramVerificationSendResponse sendTelegramVerification(TelegramVerificationSendRequest request) {
-        if (repository.telegramExists(request.telegram())) {
-            throw new AuthValidationException("DUPLICATE_TELEGRAM", "telegram is already used by an open application");
-        }
-        String code = codeGenerator.generateSixDigitCode();
-        Instant expiresAt = Instant.now(clock).plus(TELEGRAM_CODE_TTL);
-        repository.createTelegramVerification(request.telegram(), HashingSupport.sha256(code), expiresAt, request.requestId());
-        repository.recordActivity("SYSTEM", "SIGNUP_TELEGRAM_VERIFICATION_SENT", "SUCCESS", "distributor_signup_telegram_verifications", null, request.requestId());
-        return new TelegramVerificationSendResponse(
-                "TELEGRAM_VERIFICATION_SENT",
-                "auth.telegramVerification.sent",
-                expiresAt
-        );
-    }
-
-    @Transactional
-    public TelegramVerificationConfirmResponse confirmTelegramVerification(TelegramVerificationConfirmRequest request) {
-        boolean verified = repository.confirmTelegramVerification(
-                request.telegram(),
-                HashingSupport.sha256(request.code()),
-                Instant.now(clock)
-        );
-        repository.recordActivity(
-                "SYSTEM",
-                "SIGNUP_TELEGRAM_VERIFICATION_CONFIRMED",
-                verified ? "SUCCESS" : "FAILED",
-                "distributor_signup_telegram_verifications",
-                null,
-                request.requestId()
-        );
-        if (!verified) {
-            throw new AuthValidationException("INVALID_TELEGRAM_VERIFICATION_CODE", "telegram verification code is invalid or expired");
-        }
-        return new TelegramVerificationConfirmResponse(true, "TELEGRAM_VERIFIED", "auth.telegramVerification.verified");
     }
 
     @Transactional

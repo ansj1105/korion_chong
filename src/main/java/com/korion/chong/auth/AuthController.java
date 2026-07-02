@@ -45,16 +45,6 @@ public class AuthController {
         return service.confirmEmailVerification(request);
     }
 
-    @PostMapping("/telegram-verifications/send")
-    public TelegramVerificationSendResponse sendTelegramVerification(@Valid @RequestBody TelegramVerificationSendRequest request) {
-        return service.sendTelegramVerification(request);
-    }
-
-    @PostMapping("/telegram-verifications/confirm")
-    public TelegramVerificationConfirmResponse confirmTelegramVerification(@Valid @RequestBody TelegramVerificationConfirmRequest request) {
-        return service.confirmTelegramVerification(request);
-    }
-
     @PostMapping("/wallet-links/verify")
     public WalletLinkVerifyResponse verifyWalletLink(@Valid @RequestBody WalletLinkVerifyRequest request) {
         return service.verifyWalletLink(request);

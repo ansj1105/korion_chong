@@ -216,67 +216,6 @@ public class JdbcAuthRepository implements AuthRepository {
     }
 
     @Override
-    public void createTelegramVerification(String telegram, String codeHash, Instant expiresAt, String requestId) {
-        jdbcTemplate.update("""
-                INSERT INTO distributor_signup_telegram_verifications (
-                    telegram, code_hash, status, request_id, expires_at
-                )
-                VALUES (:telegram, :codeHash, 'PENDING', :requestId, :expiresAt)
-                """, new MapSqlParameterSource()
-                .addValue("telegram", telegram)
-                .addValue("codeHash", codeHash)
-                .addValue("requestId", requestId)
-                .addValue("expiresAt", Timestamp.from(expiresAt)));
-    }
-
-    @Override
-    public boolean confirmTelegramVerification(String telegram, String codeHash, Instant now) {
-        int updated = jdbcTemplate.update("""
-                UPDATE distributor_signup_telegram_verifications
-                   SET status = 'VERIFIED',
-                       verified_at = :now,
-                       updated_at = :now
-                 WHERE id = (
-                     SELECT id
-                       FROM distributor_signup_telegram_verifications
-                      WHERE lower(telegram) = lower(:telegram)
-                        AND code_hash = :codeHash
-                        AND status = 'PENDING'
-                        AND expires_at > :now
-                      ORDER BY created_at DESC
-                      LIMIT 1
-                 )
-                """, new MapSqlParameterSource()
-                .addValue("telegram", telegram)
-                .addValue("codeHash", codeHash)
-                .addValue("now", Timestamp.from(now)));
-        if (updated == 0) {
-            jdbcTemplate.update("""
-                    UPDATE distributor_signup_telegram_verifications
-                       SET status = 'EXPIRED',
-                           updated_at = :now
-                     WHERE lower(telegram) = lower(:telegram)
-                       AND status = 'PENDING'
-                       AND expires_at <= :now
-                    """, new MapSqlParameterSource()
-                    .addValue("telegram", telegram)
-                    .addValue("now", Timestamp.from(now)));
-        }
-        return updated > 0;
-    }
-
-    @Override
-    public boolean telegramVerified(String telegram) {
-        return count("""
-                SELECT COUNT(*)
-                  FROM distributor_signup_telegram_verifications
-                 WHERE lower(telegram) = lower(:telegram)
-                   AND status = 'VERIFIED'
-                   AND verified_at IS NOT NULL
-                """, Map.of("telegram", telegram)) > 0;
-    }
-
-    @Override
     public void recordWalletVerification(
             WalletLinkVerifyRequest request,
             String signatureHash,
