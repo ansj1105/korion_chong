@@ -39,7 +39,7 @@ public class SmtpEmailVerificationDeliveryService implements EmailVerificationDe
 
         try {
             MimeMessage message = sender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             helper.setFrom(properties.getFrom());
             helper.setTo(email);
             helper.setSubject("[KORION] 이메일 인증번호");
